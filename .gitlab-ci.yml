@@ -1,0 +1,41 @@
+workflow:
+  rules:
+    - changes:
+        - backend/**/*
+
+stages:
+  - lint
+  - test
+  - build
+
+.node_job:
+  image: node:20-alpine
+  cache:
+    key:
+      files:
+        - backend/package-lock.json
+    paths:
+      - .npm/
+  before_script:
+    - cd backend
+    - npm ci --cache "$CI_PROJECT_DIR/.npm" --prefer-offline
+
+lint:
+  extends: .node_job
+  stage: lint
+  script:
+    - npm run lint
+
+test:
+  extends: .node_job
+  stage: test
+  script:
+    - npm run test
+
+build:
+  stage: build
+  image: docker:24-cli
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker build -t "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHORT_SHA" backend/
+    - docker push "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHORT_SHA"
