@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+configMapGenerator:
+  - name: postgres-external-db
+    envs:
+      - db-connection.env
+    options:
+      disableNameSuffixHash: true
+
+replacements:
+  - source:
+      kind: ConfigMap
+      name: postgres-external-db
+      fieldPath: data.EXTERNAL_DB_IP
+    targets:
+      - select:
+          kind: Endpoints
+          name: postgres-service
+        fieldPaths:
+          - subsets.0.addresses.0.ip
