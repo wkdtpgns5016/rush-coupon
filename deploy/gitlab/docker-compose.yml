@@ -1,0 +1,29 @@
+services:
+  gitlab:
+    image: gitlab/gitlab-ce:19.3.2-ce.0
+    container_name: rush-coupon-gitlab
+    restart: unless-stopped
+    shm_size: "256m"
+    ports:
+      - "0.0.0.0:${GITLAB_HTTP_PORT:-80}:80"
+      - "0.0.0.0:${GITLAB_SSH_PORT:-2222}:22"
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url '${GITLAB_EXTERNAL_URL:-http://100.113.87.50}'
+        gitlab_rails['gitlab_shell_ssh_port'] = ${GITLAB_SSH_PORT:-2222}
+        gitlab_rails['initial_root_password'] = '${GITLAB_ROOT_PASSWORD}'
+    volumes:
+      - gitlab_config:/etc/gitlab
+      - gitlab_logs:/var/log/gitlab
+      - gitlab_data:/var/opt/gitlab
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/-/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+volumes:
+  gitlab_config:
+  gitlab_logs:
+  gitlab_data:
