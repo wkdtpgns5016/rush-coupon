@@ -9,7 +9,7 @@ stages:
   - build
 
 .node_job:
-  image: node:20-alpine
+  image: node:24-alpine
   cache:
     key:
       files:
