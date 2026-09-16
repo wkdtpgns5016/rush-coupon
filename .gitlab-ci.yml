@@ -42,7 +42,9 @@ build:
 
 deploy:
   stage: deploy
-  image: alpine/git:latest
+  image:
+    name: alpine/git:latest
+    entrypoint: [""]
   when: manual
   script:
     - git clone --branch deploy --single-branch "https://${GITHUB_PAT}@github.com/wkdtpgns5016/rush-coupon.git" deploy-repo
