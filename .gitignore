@@ -15,11 +15,3 @@ dist/
 build/
 backend/dist/
 frontend/dist/
-
-# 배포 시 CI가 scp로 올리는 릴리스 (dist-initial만 부트스트랩용으로 커밋됨)
-deploy/frontend/releases/dist-*
-!deploy/frontend/releases/dist-initial
-
-# 배포 때마다 SSH로 교체되는 심볼릭 링크 — git 추적하면 checkout/clean 한 번에
-# 운영 중인 링크가 되돌아갈 위험이 있어 최초 1회만 수동 생성 (docs/setup 참고)
-deploy/frontend/releases/current

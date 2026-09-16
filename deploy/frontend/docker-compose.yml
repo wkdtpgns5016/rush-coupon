@@ -1,10 +1,15 @@
 services:
   nginx:
-    image: nginx:alpine
+    build: .
     container_name: rush-coupon-frontend
     restart: unless-stopped
+    environment:
+      DEPLOY_PUBLIC_KEY: ${DEPLOY_PUBLIC_KEY}
     ports:
       - "0.0.0.0:${FRONTEND_PORT:-8080}:80"
+      - "0.0.0.0:${FRONTEND_SSH_PORT:-2222}:22"
     volumes:
-      - ./releases:/usr/share/nginx/releases:ro
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - frontend_releases:/releases
+
+volumes:
+  frontend_releases:

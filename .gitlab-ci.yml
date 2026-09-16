@@ -111,11 +111,8 @@ frontend-deploy:
     - eval $(ssh-agent -s)
     - echo "$FRONTEND_SSH_PRIVATE_KEY" | base64 -d | ssh-add -
     - mkdir -p ~/.ssh
-    - ssh-keyscan -H "$FRONTEND_HOST" >> ~/.ssh/known_hosts
+    - ssh-keyscan -p "$FRONTEND_SSH_PORT" -H "$FRONTEND_HOST" >> ~/.ssh/known_hosts
   script:
     - RELEASE_DIR="dist-$CI_COMMIT_SHORT_SHA"
-    - scp -r frontend/dist "$FRONTEND_SSH_USER@$FRONTEND_HOST:$FRONTEND_RELEASES_PATH/$RELEASE_DIR"
-    - >
-      ssh "$FRONTEND_SSH_USER@$FRONTEND_HOST"
-      "ln -s $RELEASE_DIR $FRONTEND_RELEASES_PATH/current.new &&
-       mv -Tf $FRONTEND_RELEASES_PATH/current.new $FRONTEND_RELEASES_PATH/current"
+    - scp -P "$FRONTEND_SSH_PORT" -r frontend/dist "deploy@$FRONTEND_HOST:/releases/$RELEASE_DIR"
+    - ssh -p "$FRONTEND_SSH_PORT" "deploy@$FRONTEND_HOST" "ln -sfn $RELEASE_DIR /releases/current"
