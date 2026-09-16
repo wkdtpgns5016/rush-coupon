@@ -69,3 +69,27 @@ kubectl apply -f <(git show origin/deploy:k8s/backend/argocd-application.yaml)
 
 - `deploy/gitlab/` 참고 — GitLab CE + GitLab Runner를 Docker Compose로 구성
 - GitHub ↔ GitLab 미러링, Runner 등록, Container Registry 활성화, CI/CD Variables(`GITHUB_PAT`) 등은 `deploy/gitlab/docker-compose.yml`과 `.github/workflows/mirror-to-gitlab.yml`, `.gitlab-ci.yml` 참고
+
+## 7. Frontend 정적 호스팅 (nginx)
+
+`current` 심볼릭 링크는 배포 때마다 CI가 SSH로 교체하는 대상이라 git에 추적하지 않습니다. 그래서 최초 1회는 수동으로 만들어줘야 합니다:
+
+```bash
+cd deploy/frontend/releases
+ln -sfn dist-initial current
+```
+
+그다음:
+
+```bash
+cd deploy/frontend
+cp .env.example .env   # 값 채우기
+docker compose up -d
+```
+
+CI의 `frontend-deploy` job이 SSH로 접속해 배포하려면 아래 GitLab CI/CD Variables도 필요합니다:
+
+- `FRONTEND_SSH_PRIVATE_KEY` (protected+masked) — 공개키는 맥북 `~/.ssh/authorized_keys`에 등록
+- `FRONTEND_SSH_USER` — 맥북 계정명
+- `FRONTEND_HOST` = `<GITLAB_HOST>` (같은 Tailscale IP)
+- `FRONTEND_RELEASES_PATH` — 이 레포의 절대경로 + `/deploy/frontend/releases`
