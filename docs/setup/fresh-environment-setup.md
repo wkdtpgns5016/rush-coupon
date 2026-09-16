@@ -70,26 +70,37 @@ kubectl apply -f <(git show origin/deploy:k8s/backend/argocd-application.yaml)
 - `deploy/gitlab/` 참고 — GitLab CE + GitLab Runner를 Docker Compose로 구성
 - GitHub ↔ GitLab 미러링, Runner 등록, Container Registry 활성화, CI/CD Variables(`GITHUB_PAT`) 등은 `deploy/gitlab/docker-compose.yml`과 `.github/workflows/mirror-to-gitlab.yml`, `.gitlab-ci.yml` 참고
 
-## 7. Frontend 정적 호스팅 (nginx)
+## 7. Frontend 정적 호스팅 (nginx + 컨테이너 내장 SSH)
 
-`current` 심볼릭 링크는 배포 때마다 CI가 SSH로 교체하는 대상이라 git에 추적하지 않습니다. 그래서 최초 1회는 수동으로 만들어줘야 합니다:
+`deploy/frontend`는 nginx에 sshd를 같이 띄운 컨테이너입니다. 맥북 계정으로 직접 SSH하지 않고, 컨테이너 전용 `deploy` 계정으로만 SSH가 허용되도록 격리되어 있습니다. `/releases`(배포 콘텐츠)는 named volume이라 컨테이너를 재생성해도 유지됩니다.
+
+CI가 SSH로 접속할 전용 키페어를 생성합니다 (최초 1회, 패스프레이즈 없이):
 
 ```bash
-cd deploy/frontend/releases
-ln -sfn dist-initial current
+ssh-keygen -t ed25519 -f ~/.ssh/gitlab_ci_frontend_deploy -N ""
 ```
-
-그다음:
 
 ```bash
 cd deploy/frontend
-cp .env.example .env   # 값 채우기
-docker compose up -d
+cp .env.example .env
 ```
 
-CI의 `frontend-deploy` job이 SSH로 접속해 배포하려면 아래 GitLab CI/CD Variables도 필요합니다:
+`.env`에 값 채우기:
+- `DEPLOY_PUBLIC_KEY` = `cat ~/.ssh/gitlab_ci_frontend_deploy.pub` 출력 전체 (공개키라 git엔 안 올리고 여기 `.env`로만 관리, 컨테이너가 기동 시 `authorized_keys`로 씀)
+- `FRONTEND_SSH_PORT` — `deploy/gitlab`의 `GITLAB_SSH_PORT`(기본 2222)와 겹치지 않는 값으로 (예: 2223)
 
-- `FRONTEND_SSH_PRIVATE_KEY` (protected+masked) — 공개키는 맥북 `~/.ssh/authorized_keys`에 등록
-- `FRONTEND_SSH_USER` — 맥북 계정명
+```bash
+docker compose up -d --build
+```
+
+GitLab CI/CD Variables:
+
+- `FRONTEND_SSH_PRIVATE_KEY` (protected+masked) — GitLab masked variable은 개행 문자를 허용하지 않아서, 개인키를 base64로 한 줄 인코딩해서 등록해야 함:
+  ```bash
+  base64 -b 0 -i ~/.ssh/gitlab_ci_frontend_deploy | pbcopy
+  ```
+  (`.gitlab-ci.yml`에서 `base64 -d`로 디코드해서 씀)
 - `FRONTEND_HOST` = `<GITLAB_HOST>` (같은 Tailscale IP)
-- `FRONTEND_RELEASES_PATH` — 이 레포의 절대경로 + `/deploy/frontend/releases`
+- `FRONTEND_SSH_PORT` — `.env`에 넣은 값과 동일하게 (GitLab SSH 포트랑 겹치면 엉뚱하게 GitLab sshd로 접속 시도해서 `Permission denied`로 실패함 — 실제로 겪었던 문제)
+
+SSH 유저(`deploy`)와 배포 경로(`/releases`)는 이미지에 고정되어 있어서 별도 변수가 필요 없습니다.
