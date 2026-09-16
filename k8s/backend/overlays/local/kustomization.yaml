@@ -1,0 +1,49 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+configMapGenerator:
+  - name: backend-registry
+    envs:
+      - registry-connection.env
+    options:
+      disableNameSuffixHash: true
+  - name: backend-image-tag
+    envs:
+      - image-tag.properties
+    options:
+      disableNameSuffixHash: true
+
+replacements:
+  - source:
+      kind: ConfigMap
+      name: backend-registry
+      fieldPath: data.REGISTRY_HOST
+    targets:
+      - select:
+          kind: Deployment
+          name: backend
+        fieldPaths:
+          - spec.template.spec.containers.0.image
+        options:
+          delimiter: "/"
+          index: 0
+  # index: 2는 REGISTRY_HOST가 host:port(콜론 1개) 형식이고, 위 host replacement가
+  # 먼저 적용돼서 image 필드가 이미 "<host>:<port>/root/rush-coupon/backend:<tag>"
+  # (콜론 기준 3개 구간)가 된 상태를 전제로 합니다.
+  # kustomize v5.0.1의 replacements에서는 index: -1(마지막 구간)이 지원되지 않습니다.
+  - source:
+      kind: ConfigMap
+      name: backend-image-tag
+      fieldPath: data.IMAGE_TAG
+    targets:
+      - select:
+          kind: Deployment
+          name: backend
+        fieldPaths:
+          - spec.template.spec.containers.0.image
+        options:
+          delimiter: ":"
+          index: 2
