@@ -1,9 +1,0 @@
-apiVersion: v1
-kind: Endpoints
-metadata:
-  name: postgres-service
-subsets:
-  - addresses:
-      - ip: 0.0.0.0 # overlay에서 실제 EXTERNAL_DB_IP로 치환됨
-    ports:
-      - port: 5432
