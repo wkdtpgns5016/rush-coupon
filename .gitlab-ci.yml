@@ -7,6 +7,7 @@ stages:
   - lint
   - test
   - build
+  - deploy
 
 .node_job:
   image: node:24-alpine
@@ -38,3 +39,17 @@ build:
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - docker buildx build --platform linux/amd64 -t "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHORT_SHA" --push backend/
+
+deploy:
+  stage: deploy
+  image: alpine/git:latest
+  when: manual
+  script:
+    - git clone --branch deploy --single-branch "https://${GITHUB_PAT}@github.com/wkdtpgns5016/rush-coupon.git" deploy-repo
+    - cd deploy-repo
+    - sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$CI_COMMIT_SHORT_SHA/" k8s/backend/overlays/local/image-tag.properties
+    - git config user.email "ci@gitlab.local"
+    - git config user.name "GitLab CI"
+    - >
+      git diff --quiet && echo "이미지 태그 변경 없음, 스킵" ||
+      (git commit -am "deploy: backend image tag -> $CI_COMMIT_SHORT_SHA" && git push origin deploy)
