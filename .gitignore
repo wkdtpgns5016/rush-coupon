@@ -3,3 +3,7 @@
 .env.local
 *.env
 !.env.example
+
+# ArgoCD는 git에 커밋된 내용만 읽을 수 있어서, kustomize configMapGenerator가
+# 참조하는 값은 비밀이 아닌 이상 커밋되어야 함 (Tailscale IP는 비밀 아님)
+!k8s/backend/overlays/local/registry-connection.env
