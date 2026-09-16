@@ -1,0 +1,10 @@
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: rush-coupon-frontend
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:${FRONTEND_PORT:-8080}:80"
+    volumes:
+      - ./releases:/usr/share/nginx/releases:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
