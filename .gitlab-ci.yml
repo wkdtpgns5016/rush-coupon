@@ -3,6 +3,7 @@ workflow:
     - changes:
         - backend/**/*
         - frontend/**/*
+        - .gitlab-ci.yml
 
 stages:
   - lint
@@ -87,7 +88,7 @@ backend-deploy:
         - backend/**/*
   script:
     - apk add --no-cache postgresql-client
-    - psql "postgresql://${EXTERNAL_DB_USER}:${EXTERNAL_DB_PASSWORD}@${EXTERNAL_DB_HOST}:${EXTERNAL_DB_PORT}/${EXTERNAL_DB_NAME}" -f backend/db/schema.sql
+    - PGPASSWORD="$EXTERNAL_DB_PASSWORD" psql -h "$EXTERNAL_DB_HOST" -p "$EXTERNAL_DB_PORT" -U "$EXTERNAL_DB_USER" -d "$EXTERNAL_DB_NAME" -f backend/db/schema.sql
     - git clone --branch deploy --single-branch "https://${GITHUB_PAT}@github.com/wkdtpgns5016/rush-coupon.git" deploy-repo
     - cd deploy-repo
     - sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$CI_COMMIT_SHORT_SHA/" k8s/backend/overlays/local/image-tag.properties
