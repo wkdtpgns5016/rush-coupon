@@ -4,6 +4,10 @@
 *.env
 !.env.example
 
+# Frontend build-time env: values get baked into the deployed bundle,
+# so the real production value is injected via CI/CD variable instead of committed here.
+frontend/.env.production
+
 # Package Dependencies
 node_modules/
 backend/node_modules/
