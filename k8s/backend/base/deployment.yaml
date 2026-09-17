@@ -24,6 +24,31 @@ spec:
               value: "3000"
             - name: CORS_ORIGIN
               value: CORS_ORIGIN_PLACEHOLDER
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: backend-db-credentials
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: backend-db-credentials
+                  key: DB_PORT
+            - name: DB_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: backend-db-credentials
+                  key: DB_DATABASE
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: backend-db-credentials
+                  key: DB_USERNAME
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backend-db-credentials
+                  key: DB_PASSWORD
           resources:
             requests:
               cpu: 100m
