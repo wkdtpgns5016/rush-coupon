@@ -15,6 +15,11 @@ configMapGenerator:
       - image-tag.properties
     options:
       disableNameSuffixHash: true
+  - name: backend-network
+    envs:
+      - network-connection.env
+    options:
+      disableNameSuffixHash: true
 
 replacements:
   - source:
@@ -47,3 +52,23 @@ replacements:
         options:
           delimiter: ":"
           index: 2
+  - source:
+      kind: ConfigMap
+      name: backend-network
+      fieldPath: data.INGRESS_HOST
+    targets:
+      - select:
+          kind: Ingress
+          name: backend
+        fieldPaths:
+          - spec.rules.0.host
+  - source:
+      kind: ConfigMap
+      name: backend-network
+      fieldPath: data.CORS_ORIGIN
+    targets:
+      - select:
+          kind: Deployment
+          name: backend
+        fieldPaths:
+          - "spec.template.spec.containers.[name=backend].env.[name=CORS_ORIGIN].value"
