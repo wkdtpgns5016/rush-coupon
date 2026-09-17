@@ -49,6 +49,20 @@ backend-lint:
 backend-test:
   extends: .backend_node_job
   stage: test
+  services:
+    - name: postgres:16-alpine
+      alias: postgres
+  variables:
+    POSTGRES_DB: rush_coupon
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: postgres
+    TEST_DB_HOST: postgres
+    TEST_DB_PORT: "5432"
+  before_script:
+    - !reference [.backend_node_job, before_script]
+    - apk add --no-cache postgresql-client
+    - until pg_isready -h postgres -U "$POSTGRES_USER"; do sleep 1; done
+    - psql "postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@postgres:5432/$POSTGRES_DB" -f db/schema.sql
   script:
     - npm run test
 
