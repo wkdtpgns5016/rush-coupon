@@ -15,6 +15,12 @@ cp .env.example .env   # 값 채우기
 docker compose up -d
 ```
 
+스키마(`backend/db/schema.sql`)는 GitLab CI의 `backend-deploy` job이 배포할 때마다 자동 적용합니다(`CREATE TABLE IF NOT EXISTS`라 멱등성 있음). 테스트용 시드 데이터(`backend/db/seed.sql`)는 멱등성이 없어서 자동화 대상이 아니고, 필요하면 최초 1회 수동으로 넣습니다:
+
+```bash
+docker exec -i rush-coupon-postgres psql -U coupon_user -d rush_coupon -f - < backend/db/seed.sql
+```
+
 ## 2. k8s에서 그 Postgres에 접근할 수 있게 Endpoints/Service 적용 (deploy 브랜치)
 
 ```bash
