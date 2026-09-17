@@ -36,7 +36,23 @@ kubectl create secret docker-registry gitlab-registry \
   --docker-email=noreply@example.com
 ```
 
-## 4. k8s-worker containerd에 GitLab Registry를 insecure(HTTP) 레지스트리로 등록
+## 4. backend DB credentials Secret 생성
+
+`k8s/backend/base/deployment.yaml`이 `secretKeyRef`로 참조하는 시크릿입니다. `imagePullSecret`(위 3번)과 마찬가지로 비밀 아닌 값(호스트/포트/DB명)까지 포함해서 한 번에 명령어로 생성합니다 (git엔 안 올림):
+
+```bash
+kubectl create secret generic backend-db-credentials \
+  --namespace=rush-coupon \
+  --from-literal=DB_HOST=<postgres_service_name> \
+  --from-literal=DB_PORT=<db_port> \
+  --from-literal=DB_DATABASE=<db_name> \
+  --from-literal=DB_USERNAME=<db_user> \
+  --from-literal=DB_PASSWORD=<db_password>
+```
+
+(1번에서 만든 Postgres의 접속 정보와 동일해야 합니다.)
+
+## 5. k8s-worker containerd에 GitLab Registry를 insecure(HTTP) 레지스트리로 등록
 
 worker 노드에 SSH로 접속해서:
 
@@ -56,7 +72,7 @@ EOF
 sudo systemctl restart containerd
 ```
 
-## 5. ArgoCD에 backend Application 등록
+## 6. ArgoCD에 backend Application 등록
 
 `deploy` 브랜치를 보게 되어 있습니다 (`k8s/backend/argocd-application.yaml`도 그 브랜치에 있음):
 
@@ -65,12 +81,12 @@ git fetch origin deploy
 kubectl apply -f <(git show origin/deploy:k8s/backend/argocd-application.yaml)
 ```
 
-## 6. GitLab 서버 / Runner / 미러링 / CI 시크릿
+## 7. GitLab 서버 / Runner / 미러링 / CI 시크릿
 
 - `deploy/gitlab/` 참고 — GitLab CE + GitLab Runner를 Docker Compose로 구성
 - GitHub ↔ GitLab 미러링, Runner 등록, Container Registry 활성화, CI/CD Variables(`GITHUB_PAT`) 등은 `deploy/gitlab/docker-compose.yml`과 `.github/workflows/mirror-to-gitlab.yml`, `.gitlab-ci.yml` 참고
 
-## 7. Frontend 정적 호스팅 (nginx + 컨테이너 내장 SSH)
+## 8. Frontend 정적 호스팅 (nginx + 컨테이너 내장 SSH)
 
 `deploy/frontend`는 nginx에 sshd를 같이 띄운 컨테이너입니다. 맥북 계정으로 직접 SSH하지 않고, 컨테이너 전용 `deploy` 계정으로만 SSH가 허용되도록 격리되어 있습니다. `/releases`(배포 콘텐츠)는 named volume이라 컨테이너를 재생성해도 유지됩니다.
 
