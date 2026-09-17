@@ -104,6 +104,9 @@ frontend-lint:
 frontend-build:
   extends: .frontend_node_job
   stage: build
+  # VITE_API_BASE_URL은 frontend/.env.production에 커밋하지 않고,
+  # GitLab CI/CD 변수(Settings > CI/CD > Variables)로 주입한다.
+  # Vite는 기존 환경변수를 .env 파일보다 우선하므로 별도 파일 조작 없이 적용된다.
   script:
     - npm run build
   artifacts:
