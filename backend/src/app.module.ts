@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { Coupon } from './coupons/entities/coupon.entity';
 import { CouponIssue } from './coupons/entities/coupon-issue.entity';
+import { CouponsModule } from './coupons/coupons.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { CouponIssue } from './coupons/entities/coupon-issue.entity';
         synchronize: false,
       }),
     }),
+    CouponsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
