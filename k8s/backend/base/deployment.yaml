@@ -16,14 +16,17 @@ spec:
         - name: gitlab-registry
       containers:
         - name: backend
-          image: REGISTRY_HOST/root/rush-coupon/backend:IMAGE_TAG
+          image: IMAGE_PLACEHOLDER
           ports:
             - containerPort: 3000
           env:
             - name: PORT
               value: "3000"
             - name: CORS_ORIGIN
-              value: CORS_ORIGIN_PLACEHOLDER
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-network
+                  key: CORS_ORIGIN
             - name: DB_HOST
               valueFrom:
                 secretKeyRef:
