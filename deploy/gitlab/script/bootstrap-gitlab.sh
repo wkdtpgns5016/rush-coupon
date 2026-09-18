@@ -114,7 +114,8 @@ docker exec "$RUNNER_CONTAINER" gitlab-runner register \
   --url "http://${GITLAB_HOST}" \
   --token "${RUNNER_TOKEN}" \
   --executor "docker" \
-  --docker-image "docker:24-cli"
+  --docker-image "docker:24-cli" \
+  --docker-volumes "/var/run/docker.sock:/var/run/docker.sock"
 
 echo "== 6. deploy/gitlab/.env 갱신 =="
 set_env "TOKEN" "$TOKEN"

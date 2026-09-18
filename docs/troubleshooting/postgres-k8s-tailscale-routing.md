@@ -123,7 +123,7 @@ Requires=tailscaled.service
 
 [Service]
 Type=oneshot
-ExecStart=/sbin/ip route replace 100.64.0.0/10 dev tailscale0
+ExecStart=/bin/sh -c 'for i in $(seq 1 30); do [ "$(cat /sys/class/net/tailscale0/operstate 2>/dev/null)" = "up" ] && break; sleep 1; done; ip route replace 100.64.0.0/10 dev tailscale0'
 RemainAfterExit=yes
 
 [Install]
@@ -136,6 +136,10 @@ sudo systemctl enable --now tailscale-pod-route.service
 ```
 
 > `ip route replace`를 사용해 이미 라우트가 있어도 에러 없이 재실행 가능하도록 했다.
+>
+> **`After=`/`Requires=tailscaled.service`만으로는 부족했다** — 실제로 재부팅해서 겪은 문제: systemd가 "tailscaled.service 시작됨"으로 판단하는 시점과, tailscaled가 실제로 `tailscale0` 인터페이스를 UP 상태로 올리는 시점이 다르다. 그 사이에 이 유닛이 실행되면 `ip route replace`가 `Error: Device for nexthop is not up.`로 실패하고, 재시도 로직이 없어 그대로 끝나버린다 (`enabled` 상태인데도 라우트가 안 들어가 있는 것처럼 보임). 그래서 `ExecStart`에 인터페이스가 UP 될 때까지 최대 30초 재시도하는 루프를 추가했다.
+>
+> **재시도 체크 방식도 처음엔 잘못 짚었다** — 처음엔 `ip link show tailscale0 up`으로 체크했는데, 이 명령은 인터페이스가 아직 안 올라와 있어도 "필터에 안 걸려서 빈 결과"일 뿐 exit code는 0(성공)으로 나온다. 그래서 반복문이 첫 시도에 바로 "성공"으로 오판하고 break해버리고, 뒤이은 `ip route replace`는 여전히 실패했다 (재부팅해서 실제로 재현/확인함). `/sys/class/net/tailscale0/operstate` 파일로 실제 링크 상태(`up`/`down`)를 직접 읽는 걸로 바꿔서 해결.
 
 ---
 
@@ -192,3 +196,4 @@ kubectl apply -k k8s/database/overlays/local
 - [ ] `ip route show table main`에 목적지 대역으로 가는 라우트가 있는지 확인 (Tailscale/WireGuard류는 보통 전용 테이블만 쓰고 메인 테이블엔 안 넣어줌)
 - [ ] 애매하면 추측하지 말고 **tcpdump로 실제 나가는 인터페이스를 확인**해서 근거를 확보
 - [ ] 새 워커 노드를 추가하거나 VM을 재생성할 경우, `tailscale-pod-route.service`도 같이 세팅해야 함 (Tailscale 설치만으로는 파드 트래픽까지 자동으로 라우팅되지 않음)
+- [ ] `tailscale-pod-route.service`가 `enabled`인데도 라우트가 없다면, `systemctl status tailscale-pod-route.service`로 재부팅 시 실제로 성공했는지부터 확인 (`enabled` ≠ 마지막 실행이 성공했다는 뜻이 아님 — `After=tailscaled.service`만으로는 인터페이스가 실제 UP 되기 전에 실행돼서 실패할 수 있음)
