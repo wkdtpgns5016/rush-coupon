@@ -95,7 +95,7 @@ backend-deploy:
     - PGPASSWORD="$EXTERNAL_DB_PASSWORD" psql -h "$EXTERNAL_DB_HOST" -p "$EXTERNAL_DB_PORT" -U "$EXTERNAL_DB_USER" -d "$EXTERNAL_DB_NAME" -f backend/db/schema.sql
     - git clone --branch deploy --single-branch "https://${GITHUB_PAT}@github.com/wkdtpgns5016/rush-coupon.git" deploy-repo
     - cd deploy-repo
-    - sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$CI_COMMIT_SHORT_SHA/" k8s/backend/overlays/local/image-tag.properties
+    - sed -i "s|^IMAGE=.*|IMAGE=$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHORT_SHA|" k8s/backend/overlays/local/image.env
     - git config user.email "ci@gitlab.local"
     - git config user.name "GitLab CI"
     - >

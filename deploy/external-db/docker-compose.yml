@@ -13,7 +13,9 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./config/postgresql.conf:/etc/postgresql/postgresql.conf:ro
-      - ./init:/docker-entrypoint-initdb.d:ro
+      - ./init/01-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ../../backend/db/schema.sql:/docker-entrypoint-initdb.d/02-schema.sql:ro
+      - ../../backend/db/seed.sql:/docker-entrypoint-initdb.d/03-seed.sql:ro
     command:
       - "postgres"
       - "-c"
