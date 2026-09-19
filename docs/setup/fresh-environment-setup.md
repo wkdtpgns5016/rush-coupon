@@ -6,6 +6,7 @@
 
 - Tailscale tailnet에 GitLab을 올릴 머신과 k8s 마스터/워커 노드가 이미 조인되어 있음
 - kubeadm + containerd로 k8s 클러스터가 이미 구성되어 있음
+- [setup-k8s-vm](https://github.com/wkdtpgns5016/setup-k8s-vm)의 `install-addons.sh`로 ingress-nginx, ArgoCD, **metrics-server, 모니터링 스택(kube-prometheus-stack)** 이 이미 설치되어 있음. 9번에서 등록하는 backend Application이 HPA(→ metrics-server)와 ServiceMonitor(→ kube-prometheus-stack의 CRD)를 함께 적용하므로, 이 두 애드온은 9번보다 먼저 있어야 합니다.
 
 ## 1. Frontend 정적 호스팅 (nginx + 컨테이너 내장 SSH)
 
@@ -210,6 +211,8 @@ git fetch origin deploy
 kubectl apply -f <(git show origin/deploy:k8s/backend/argocd-application.yaml)
 ```
 
+이 Application은 Deployment/Service 외에 **HPA**(`k8s/backend/base/hpa.yaml`, 2~10개)와 **ServiceMonitor**(`servicemonitor.yaml`)도 함께 적용합니다. 그래서 전제 조건의 metrics-server / 모니터링 스택이 없으면 동기화가 실패하거나 HPA가 동작하지 않습니다. Deployment에는 `replicas`를 일부러 두지 않았는데, 두면 ArgoCD selfHeal이 HPA가 조정한 값을 계속 되돌리기 때문입니다.
+
 ## 10. GitHub → GitLab 미러링 실행 및 배포 검증
 
 9번(ArgoCD Application 등록)까지 끝난 뒤에 진행합니다.
@@ -249,7 +252,7 @@ kubectl -n argocd get application backend
 # 2. 배포된 이미지 태그가 이번 커밋과 같은지
 kubectl -n rush-coupon get deploy backend -o jsonpath='{.spec.template.spec.containers[0].image}'; echo
 
-# 3. 롤아웃 완료 / Pod Running
+# 3. 롤아웃 완료 / Pod Running (HPA minReplicas가 2라서 Pod가 2개 뜸)
 kubectl -n rush-coupon rollout status deploy/backend
 kubectl -n rush-coupon get pods
 
@@ -287,6 +290,45 @@ curl -I http://<FRONTEND_HOST>:<FRONTEND_PORT>/     # HTTP/1.1 200 OK
 | `backend-build`의 push 단계 실패 (`HTTP response to HTTPS client` 등) | 6-3 Container Registry insecure 등록 |
 | Pod가 `ImagePullBackOff` | 8번 containerd insecure 등록, `gitlab-registry` Secret (6-1) |
 | Pod가 `CrashLoopBackOff` + DB 연결 에러 | `kubectl -n rush-coupon logs deploy/backend`, 3번 Secret 값, 4번 Endpoints IP |
+| ArgoCD 동기화 실패 `no matches for kind "ServiceMonitor"` | 모니터링 스택 설치 여부 (`kubectl get crd servicemonitors.monitoring.coreos.com`) |
+| HPA `TARGETS`가 `<unknown>` | metrics-server 설치 여부 (`kubectl top nodes`가 동작해야 함) |
 | `curl http://<INGRESS_HOST>/`가 404/502 | 5번 `INGRESS_HOST` 값, Pod Ready 여부 |
 | 브라우저에서 CORS 에러 | 5번 `CORS_ORIGIN`이 `http://<FRONTEND_HOST>:<FRONTEND_PORT>`와 정확히 일치하는지 |
 | `frontend-deploy`가 SSH에서 `Permission denied` | 1번 `FRONTEND_SSH_PORT`가 GitLab SSH 포트와 겹치지 않는지, 키 |
+
+## 11. 모니터링 대시보드 적용 및 수집/HPA 확인 (deploy 브랜치)
+
+Prometheus/Grafana 자체는 전제 조건의 `install-addons.sh`가 이미 설치했습니다. 여기서는 rush-coupon 전용 조각만 붙입니다. ServiceMonitor(backend `/metrics` 15초 수집)와 HPA는 9번의 ArgoCD Application이 이미 적용했고, 남은 것은 Grafana 대시보드뿐입니다. 대시보드는 ArgoCD 추적 대상이 아니라 직접 `kubectl apply -k` 합니다 (4·5번과 같은 방식):
+
+```bash
+cd k8s/monitoring
+kubectl apply -k .
+```
+
+Grafana 사이드카가 잠시 뒤 **Rush Coupon API** 대시보드를 자동으로 읽습니다. 접속 정보는 `install-addons.sh` 출력에 있고, 비밀번호는 다음으로도 확인할 수 있습니다:
+
+```bash
+kubectl -n monitoring get secret kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' | base64 -d; echo
+```
+
+**수집 확인**
+
+```bash
+kubectl -n rush-coupon get servicemonitor backend
+```
+
+Prometheus UI(`http://prometheus.<IP>.nip.io/targets`)에서 `rush-coupon/backend`가 **UP**이어야 합니다. 대시보드의 HTTP 패널(RPS, P95/P99, 발급 결과 분포)은 backend에 요청이 들어와야 채워지니, 10-3의 `curl`을 몇 번 호출한 뒤 봅니다. 노드/Pod 리소스 패널은 kubelet(cAdvisor)·kube-state-metrics·node-exporter 지표를 쓰므로 별도 설정 없이 나옵니다.
+
+`/targets`에 backend가 아예 없거나 DOWN이면, 배포된 backend 이미지가 `/metrics`를 제공하는 커밋 이후의 것인지(10-3 2번의 이미지 태그)부터 확인하세요.
+
+**HPA 확인**
+
+```bash
+kubectl top nodes
+kubectl -n rush-coupon get hpa backend    # TARGETS가 <unknown>이 아니라 cpu: N%/70%, memory: N%/80% 로 보여야 함
+```
+
+- 두 사용률은 모두 **requests(CPU 100m / 메모리 128Mi) 대비**입니다. Node.js 앱은 idle에서도 메모리를 100Mi 안팎 쓸 수 있어, 메모리 80% 기준 때문에 부하 없이도 스케일 아웃할 수 있습니다. 첫 배포 후 `kubectl top pod -n rush-coupon`으로 idle 사용량을 확인하세요.
+- Prometheus 스토리지가 `emptyDir`(retention 3d)이라 Prometheus Pod가 재시작되면 지표가 사라집니다. 부하 테스트 결과는 그 전에 캡처해 두세요.
+
+패널 구성과 자세한 설명은 `deploy` 브랜치의 `k8s/monitoring/README.md`를 참고하세요.
