@@ -63,7 +63,17 @@ kubectl create secret generic backend-db-credentials \
   --from-literal=DB_PASSWORD=<db_password>
 ```
 
-(2번에서 만든 Postgres의 접속 정보와 동일해야 합니다.)
+각 값은 다음을 채우면 됩니다:
+
+| 키 | 넣을 값 | 설명 |
+|---|---|---|
+| `DB_HOST` | **`postgres-service`** (고정값) | 4번에서 만드는 `k8s/database/base/service.yaml`의 Service 이름. `rush-coupon` 네임스페이스 안이라 backend Pod에서 서비스명만으로 DNS 조회가 됩니다. **IP를 넣지 마세요** — 실제 Postgres 위치(Tailscale IP)는 4번의 Endpoints가 담당합니다. |
+| `DB_PORT` | **`5432`** | k8s Service/Endpoints 포트가 5432로 고정되어 있습니다. 2번 `.env`의 `POSTGRES_PORT`를 5432가 아닌 값으로 바꿨다면 `k8s/database/base`의 포트도 같이 바꿔야 하고, 그 값을 여기에 넣어야 합니다. |
+| `DB_DATABASE` | 2번 `deploy/external-db/.env`의 `POSTGRES_DB` | 예: `rush_coupon` |
+| `DB_USERNAME` | 2번 `deploy/external-db/.env`의 `POSTGRES_USER` | 예: `coupon_user` |
+| `DB_PASSWORD` | 2번 `deploy/external-db/.env`의 `POSTGRES_PASSWORD` | |
+
+`DB_HOST`/`DB_PORT`는 k8s 안에서의 접속 경로(고정값)이고, 나머지 3개는 2번에서 만든 Postgres의 값과 동일해야 합니다.
 
 ## 4. k8s에서 그 Postgres에 접근할 수 있게 Endpoints/Service 적용 (deploy 브랜치)
 
@@ -109,10 +119,26 @@ cp .env.example .env   # GITLAB_ROOT_PASSWORD만 채우면 나머지(HOST=이 �
 
 ### 6-2. GitHub Actions Secrets/Variables 갱신
 
-레포 Settings > Secrets and variables > Actions:
+레포 Settings > Secrets and variables > Actions에서 등록합니다. 이 값들은 `.github/workflows/mirror-to-gitlab.yml`(GitHub `main` → GitLab 미러링)이 씁니다.
 
-- Secrets: `GITLAB_DEPLOY_TOKEN`/`GITLAB_DEPLOY_USER` = 6-1에서 출력된 값, `TS_AUTHKEY`(Tailscale ephemeral auth key)
-- Variables: `GITLAB_HOST`, `GITLAB_PROJECT_PATH`(`root/rush-coupon`) — 이 머신 IP가 안 바뀌었다면 기존 값 그대로 둬도 됨
+**Secrets** (Secrets 탭 > New repository secret):
+
+| 이름 | 넣을 값 | 용도 |
+|---|---|---|
+| `GITLAB_DEPLOY_TOKEN` | 6-1 끝에 출력된 `GITLAB_DEPLOY_TOKEN` | GitLab에 push할 때 쓰는 mirror 토큰 (`write_repository`) |
+| `GITLAB_DEPLOY_USER` | 6-1 끝에 출력된 `GITLAB_DEPLOY_USER` | 위 토큰의 bot 유저명 |
+| `TS_AUTHKEY` | Tailscale auth key | GitHub Actions 러너가 tailnet에 붙어 사설 IP의 GitLab에 닿게 함 |
+
+`TS_AUTHKEY`는 Tailscale 관리 콘솔(Settings > Keys > Generate auth key)에서 발급합니다. 러너는 실행할 때마다 새 노드로 조인하므로 **Reusable**, 끝나면 노드가 자동 정리되도록 **Ephemeral**을 켭니다. Reusable이 꺼진 키는 한 번 쓰면 다음 실행부터 Tailscale 연결 단계에서 실패합니다. 키에는 만료 기간이 있으니, 나중에 미러링이 Tailscale 연결에서 실패하면 새 키로 교체하세요.
+
+**Variables** (Variables 탭 > New repository variable — 비밀값이 아니라 Variables에 등록):
+
+| 이름 | 넣을 값 | 용도 |
+|---|---|---|
+| `GITLAB_HOST` | `deploy/gitlab/.env`의 `GITLAB_HOST` (GitLab 올린 머신의 Tailscale IP, 포트 없이) | Tailscale 연결 확인(ping) + push 대상 주소 |
+| `GITLAB_PROJECT_PATH` | `root/rush-coupon` | push 대상 프로젝트 경로 (`http://<GITLAB_HOST>/<GITLAB_PROJECT_PATH>`) |
+
+GitLab 머신의 IP가 안 바뀌었다면 기존 값 그대로 둬도 됩니다. 여기서는 등록만 하고, 실제 미러링 실행은 10번에서 합니다.
 
 ### 6-3. Container Registry insecure 등록 (이 Mac)
 
@@ -183,3 +209,84 @@ sudo systemctl restart containerd
 git fetch origin deploy
 kubectl apply -f <(git show origin/deploy:k8s/backend/argocd-application.yaml)
 ```
+
+## 10. GitHub → GitLab 미러링 실행 및 배포 검증
+
+9번(ArgoCD Application 등록)까지 끝난 뒤에 진행합니다.
+
+### 10-1. 미러링 실행 (workflow_dispatch)
+
+`main`에 push하면 자동으로 미러링되지만, 세팅 직후에는 push가 없어서 GitLab 프로젝트가 비어 있습니다. GitHub Actions에서 수동으로 한 번 실행합니다:
+
+1. GitHub 레포 > **Actions** 탭 > 왼쪽 목록에서 **Mirror to GitLab** 선택
+2. 오른쪽 **Run workflow** 버튼 > 브랜치 `main` 확인 > **Run workflow**
+3. 실행이 초록색(성공)이 되면 `http://<GITLAB_HOST>`(root / `GITLAB_ROOT_PASSWORD`)의 rush-coupon 프로젝트에 코드가 올라온 것을 확인
+
+`--force` push라 GitLab의 `main`은 항상 GitHub `main`과 같은 내용으로 덮어써집니다. 실패했다면:
+- **Connect to Tailscale** 단계 실패 → `TS_AUTHKEY` (Reusable 여부, 만료)
+- **Push to GitLab** 단계 실패 → `GITLAB_DEPLOY_TOKEN`/`GITLAB_DEPLOY_USER`, `GITLAB_HOST`, `GITLAB_PROJECT_PATH`
+
+### 10-2. GitLab 파이프라인 실행
+
+미러링되면 GitLab 프로젝트 > Build > Pipelines에 파이프라인이 생깁니다.
+
+- lint / test / build job은 자동 실행됩니다.
+- `backend-deploy`, `frontend-deploy`는 **수동(manual) job**입니다. build가 끝난 뒤 각 job의 ▶ 버튼을 눌러 실행하세요.
+- `.gitlab-ci.yml`의 `workflow.rules` 때문에 `backend/`, `frontend/`, `.gitlab-ci.yml` 중 하나라도 바뀐 커밋에서만 파이프라인이 만들어집니다. 안 보이면 이 경로에 변경이 없는 커밋이라 그런 것입니다.
+
+`backend-deploy`는 외부 DB에 `schema.sql`을 적용하고, `deploy` 브랜치의 `k8s/backend/overlays/local/image.env` 이미지 태그를 새 커밋으로 갱신해 push합니다. 그러면 ArgoCD가 변경을 감지해 롤아웃합니다. `frontend-deploy`는 빌드 결과를 frontend 컨테이너의 `/releases/dist-<커밋>-<job id>`에 올리고 `/releases/current` 심볼릭 링크를 그쪽으로 바꿉니다.
+
+### 10-3. 배포 검증
+
+아래에서 이번에 배포한 커밋의 태그는 `git rev-parse --short=8 HEAD`(GitHub `main` 최신 커밋 앞 8자리)로 확인합니다.
+
+**backend**
+
+```bash
+# 1. ArgoCD가 반영했는지 (SYNC STATUS=Synced, HEALTH STATUS=Healthy)
+kubectl -n argocd get application backend
+
+# 2. 배포된 이미지 태그가 이번 커밋과 같은지
+kubectl -n rush-coupon get deploy backend -o jsonpath='{.spec.template.spec.containers[0].image}'; echo
+
+# 3. 롤아웃 완료 / Pod Running
+kubectl -n rush-coupon rollout status deploy/backend
+kubectl -n rush-coupon get pods
+
+# 4. 실제 응답 (Ingress → Service → Pod)
+curl http://<INGRESS_HOST>/        # Hello World!
+```
+
+ArgoCD는 기본적으로 몇 분 간격(기본 3분)으로 `deploy` 브랜치를 확인하므로, 2번에서 태그가 아직 이전 값이면 잠시 기다리거나 ArgoCD UI에서 Refresh 하세요.
+
+DB 연결까지 확인하려면 시드 쿠폰의 id를 조회해서 호출합니다:
+
+```bash
+docker exec rush-coupon-postgres psql -U <POSTGRES_USER> -d <POSTGRES_DB> -c "select id, title from coupons;"
+curl http://<INGRESS_HOST>/coupons/<위에서 조회한 id>
+```
+
+JSON이 응답되면 backend → `postgres-service` → 외부 Postgres 경로가 모두 정상입니다.
+
+**frontend**
+
+```bash
+# 1. current 링크가 이번 커밋의 릴리스를 가리키는지 (current -> dist-<커밋 앞 8자리>-<job id>)
+docker exec rush-coupon-frontend ls -l /releases
+
+# 2. 웹 응답
+curl -I http://<FRONTEND_HOST>:<FRONTEND_PORT>/     # HTTP/1.1 200 OK
+```
+
+브라우저에서 `http://<FRONTEND_HOST>:<FRONTEND_PORT>`에 접속해 화면이 뜨는지, 개발자도구 Network 탭에서 API 요청이 `http://<INGRESS_HOST>`로 나가 200으로 응답하는지(CORS 에러가 없는지)까지 봅니다.
+
+**문제가 생겼을 때**
+
+| 증상 | 확인할 곳 |
+|---|---|
+| `backend-build`의 push 단계 실패 (`HTTP response to HTTPS client` 등) | 6-3 Container Registry insecure 등록 |
+| Pod가 `ImagePullBackOff` | 8번 containerd insecure 등록, `gitlab-registry` Secret (6-1) |
+| Pod가 `CrashLoopBackOff` + DB 연결 에러 | `kubectl -n rush-coupon logs deploy/backend`, 3번 Secret 값, 4번 Endpoints IP |
+| `curl http://<INGRESS_HOST>/`가 404/502 | 5번 `INGRESS_HOST` 값, Pod Ready 여부 |
+| 브라우저에서 CORS 에러 | 5번 `CORS_ORIGIN`이 `http://<FRONTEND_HOST>:<FRONTEND_PORT>`와 정확히 일치하는지 |
+| `frontend-deploy`가 SSH에서 `Permission denied` | 1번 `FRONTEND_SSH_PORT`가 GitLab SSH 포트와 겹치지 않는지, 키 |

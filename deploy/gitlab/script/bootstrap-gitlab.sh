@@ -29,7 +29,15 @@ RUNNER_CONTAINER="rush-coupon-gitlab-runner"
 PROJECT_PATH="rush-coupon"
 API="http://${GITLAB_HOST}/api/v4"
 
-echo "== 0. GitLab API가 실제로 응답할 때까지 대기 =="
+echo "== 0. GitLab 최초 reconfigure 완료 + API가 실제로 응답할 때까지 대기 =="
+# 첫 기동 때 reconfigure가 끝나기 직전에 workhorse/nginx를 지연 재시작하는데, API가 JSON을 반환해도
+# 그 재시작이 아직 남아있을 수 있다 (진행 중인 요청이 502 HTML로 끊겨 토큰 발급 응답이 유실됨).
+# 가장 최근 reconfigure 로그에 "Client Run complete"가 찍힐 때까지 기다린다.
+until docker exec "$GITLAB_CONTAINER" sh -c \
+  'f=$(ls -t /var/log/gitlab/reconfigure/*.log 2>/dev/null | head -1); [ -n "$f" ] && grep -q "Client Run complete" "$f"'; do
+  printf '.'
+  sleep 3
+done
 # 컨테이너 헬스체크(localhost 기준)는 API(Puma)가 완전히 뜨기 전에도 healthy로 뜰 수 있어서,
 # API가 유효한 JSON을 반환하는지로 다시 확인한다 (버전 조회는 인증 없이도 유효한 JSON을 반환함).
 until curl -s "${API}/version" | jq -e . >/dev/null 2>&1; do

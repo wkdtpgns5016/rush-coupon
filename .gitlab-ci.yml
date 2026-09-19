@@ -138,6 +138,7 @@ frontend-deploy:
     - mkdir -p ~/.ssh
     - ssh-keyscan -p "$FRONTEND_SSH_PORT" -H "$FRONTEND_HOST" >> ~/.ssh/known_hosts
   script:
-    - RELEASE_DIR="dist-$CI_COMMIT_SHORT_SHA"
+    # 같은 커밋을 재배포해도 디렉터리가 겹치지 않도록 job id를 붙인다 (기존 디렉터리에 scp -r 하면 dist/가 한 겹 중첩됨)
+    - RELEASE_DIR="dist-$CI_COMMIT_SHORT_SHA-$CI_JOB_ID"
     - scp -P "$FRONTEND_SSH_PORT" -r frontend/dist "deploy@$FRONTEND_HOST:/releases/$RELEASE_DIR"
     - ssh -p "$FRONTEND_SSH_PORT" "deploy@$FRONTEND_HOST" "ln -sfn $RELEASE_DIR /releases/current"
