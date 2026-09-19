@@ -41,4 +41,8 @@ kubectl -n rush-coupon get servicemonitor backend
 ## 알아둘 점
 
 - Prometheus 스토리지가 `emptyDir`(retention 3d)이라 Prometheus Pod가 재시작되면 지표가 사라집니다. 부하 테스트 결과는 그 전에 스크린샷/내보내기로 남기세요.
-- 메모리 사용률 패널/HPA는 **requests(128Mi) 대비**입니다. Node.js 앱은 idle 에서도 100Mi 안팎을 쓸 수 있어 HPA 가 부하 없이도 스케일 아웃할 수 있습니다. 첫 배포 후 `kubectl top pod -n rush-coupon` 으로 idle 사용량을 확인하세요.
+- 메모리 사용률 패널/HPA는 **requests(128Mi) 대비**입니다. 이 환경의 실측 idle은 Pod당 약 44Mi(34%)라 HPA 목표 80%(약 102Mi)까지 여유가 있지만, 앱 변경으로 idle이 늘 수 있으니 `kubectl top pod -n rush-coupon`으로 가끔 확인하세요.
+- HTTP 패널(RPS, 지연, 발급 결과)의 `rate()` 구간은 **`[1m]`로 고정**했습니다. 이 스택은 Grafana 데이터소스 scrape interval이 60s(`timeInterval`)라 `$__rate_interval`이 `4m`로 치환되어, backend를 15s로 수집해도 부하 변화가 4분 평균으로 뭉개지기 때문입니다 (Grafana 13.2.1에서 확인). CPU·메모리(cAdvisor, 60s 수집)는 `$__rate_interval`을 그대로 씁니다. 대시보드 시간 범위를 길게(수 시간 이상) 넓혀 조회 step이 1m보다 커지면, step 사이 구간은 계산에서 빠져 짧은 스파이크가 안 보일 수 있으니 부하 테스트 분석은 짧은 시간 범위로 보세요.
+- **모든 대시보드가 No data이고 Data source 드롭다운이 비어 있으면** Grafana가 Prometheus 플러그인을 못 올린 것입니다 (`.../datasources/uid/prometheus/health` 가 `Plugin not registered`).
+  kube-prometheus-stack 89.x의 Grafana는 `13.2.1-distroless` 이미지에 읽기 전용 루트 파일시스템인데, Grafana 13이 시작할 때 번들 데이터소스 플러그인(prometheus, loki, tempo 등)을 최신으로 갱신하려다 `read-only file system`으로 실패하면서 플러그인이 등록에서 빠집니다.
+  Helm 설치 시 `--set-string grafana.env.GF_PLUGINS_PREINSTALL_AUTO_UPDATE=false`를 주거나, 이미 설치된 경우 `kubectl -n monitoring set env deploy/kube-prometheus-stack-grafana -c grafana GF_PLUGINS_PREINSTALL_AUTO_UPDATE=false`로 해결합니다.
