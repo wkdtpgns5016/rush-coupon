@@ -9,9 +9,21 @@ spec:
   rules:
     - host: INGRESS_HOST_PLACEHOLDER
       http:
+        # 외부에 열 경로만 허용하는 목록이다. /metrics(Prometheus)는 일부러 뺐다 — Prometheus는 Ingress가 아니라
+        # ServiceMonitor로 Pod에 직접 접근한다. 반대로 "/metrics만 차단"하는 방식은 쓰면 안 된다:
+        # nginx는 경로 대소문자를 구분하지만 Express는 구분하지 않아서 /Metrics, /metrics/ 로 우회된다.
+        # 새 API 경로를 추가하면 여기에도 추가해야 외부에서 호출된다.
         paths:
-          - path: /
+          - path: /coupons
             pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 80
+          # 배포 검증용 (curl http://<INGRESS_HOST>/ -> Hello World!)
+          - path: /
+            pathType: Exact
             backend:
               service:
                 name: backend
