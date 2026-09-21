@@ -104,6 +104,8 @@ kubectl apply -k .
 
 (`ingress-nginx`/ArgoCD 자체는 전제 조건에서 이미 설치되어 있다고 가정합니다. ArgoCD 서버의 Ingress 예시(`argocd.<worker-ip>.nip.io`)와 동일한 패턴입니다.)
 
+이 Ingress는 `/coupons`와 `/`(배포 검증용)만 backend로 넘기는 **허용 목록** 방식입니다. Prometheus용 `/metrics`가 외부에 노출되지 않게 일부러 뺀 것이고, Prometheus는 Ingress를 거치지 않고 ServiceMonitor로 Pod에 직접 접근합니다. 그래서 **backend에 새 API 경로를 추가하면 `k8s/backend/local-network/ingress.yaml`에도 추가하고 `kubectl apply -k .`를 다시 실행**해야 외부에서 호출됩니다. ("`/metrics`만 차단"하는 방식은 쓰면 안 됩니다. nginx는 경로 대소문자를 구분하지만 Express는 구분하지 않아서 `/Metrics`, `/metrics/`로 우회됩니다.)
+
 ## 6. GitLab 서버 / Runner / 미러링
 
 ### 6-1. GitLab + Runner 기동 (+ 자동 부트스트랩)
@@ -318,6 +320,13 @@ kubectl -n rush-coupon get servicemonitor backend
 ```
 
 Prometheus UI(`http://prometheus.<IP>.nip.io/targets`)에서 `rush-coupon/backend`가 **UP**이어야 합니다. 대시보드의 HTTP 패널(RPS, P95/P99, 발급 결과 분포)은 backend에 요청이 들어와야 채워지니, 10-3의 `curl`을 몇 번 호출한 뒤 봅니다. 노드/Pod 리소스 패널은 kubelet(cAdvisor)·kube-state-metrics·node-exporter 지표를 쓰므로 별도 설정 없이 나옵니다.
+
+`/metrics`가 Ingress로 외부에 노출되지 않는지도 확인합니다. 아래는 모두 404여야 하고, 반대로 API는 정상 응답해야 합니다:
+
+```bash
+for p in /metrics /Metrics /metrics/; do curl -s -o /dev/null -w "$p -> %{http_code}\n" http://<INGRESS_HOST>$p; done
+curl -s -o /dev/null -w "/coupons/<id> -> %{http_code}\n" http://<INGRESS_HOST>/coupons/<id>   # 200
+```
 
 `/targets`에 backend가 아예 없거나 DOWN이면, 배포된 backend 이미지가 `/metrics`를 제공하는 커밋 이후의 것인지(10-3 2번의 이미지 태그)부터 확인하세요.
 

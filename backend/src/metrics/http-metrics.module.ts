@@ -31,10 +31,10 @@ const LABEL_NAMES = ['method', 'route', 'status_code'];
 export class HttpMetricsModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     // Express 5 에서 '*path' 는 루트('/')를 매칭하지 못하므로 '{*path}' 로 선택적 와일드카드를 쓴다.
-    // Prometheus 스크레이핑 요청 자체는 부하 지표를 오염시키므로 제외한다.
+    // Prometheus 스크레이핑과 kubelet 헬스체크 요청은 부하 지표를 오염시키므로 제외한다.
     consumer
       .apply(HttpMetricsMiddleware)
-      .exclude('metrics')
+      .exclude('metrics', 'health')
       .forRoutes('{*path}');
   }
 }
