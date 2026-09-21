@@ -7,6 +7,7 @@ import { AppService } from './app.service';
 import { Coupon } from './coupons/entities/coupon.entity';
 import { CouponIssue } from './coupons/entities/coupon-issue.entity';
 import { CouponsModule } from './coupons/coupons.module';
+import { HealthModule } from './health/health.module';
 import { HttpMetricsModule } from './metrics/http-metrics.module';
 
 @Module({
@@ -17,6 +18,7 @@ import { HttpMetricsModule } from './metrics/http-metrics.module';
       path: '/metrics',
     }),
     HttpMetricsModule,
+    HealthModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

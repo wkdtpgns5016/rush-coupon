@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import request from 'supertest';
 import { App } from 'supertest/types';
+import { HealthModule } from '../health/health.module';
 import { HttpMetricsModule } from './http-metrics.module';
 
 @Controller()
@@ -37,6 +38,7 @@ describe('HTTP metrics', () => {
           path: '/metrics',
         }),
         HttpMetricsModule,
+        HealthModule,
       ],
       controllers: [StubRootController, StubCouponsController],
     }).compile();
@@ -109,5 +111,12 @@ describe('HTTP metrics', () => {
     await scrape();
 
     expect(await scrape()).not.toContain('route="/metrics"');
+  });
+
+  it('does not count health check requests to /health', async () => {
+    await request(app.getHttpServer()).get('/health').expect(200);
+    await request(app.getHttpServer()).get('/health').expect(200);
+
+    expect(await scrape()).not.toContain('route="/health"');
   });
 });
