@@ -1172,7 +1172,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"$namespace\", pod=~\"${app}-.+\", container!=\"\", container!=\"POD\"}[$__rate_interval]))",
+          "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"$namespace\", pod=~\"${app}-.+\", container!=\"\", container!=\"POD\"}[1m]))",
           "refId": "A",
           "legendFormat": "{{pod}}"
         }
@@ -1304,7 +1304,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "100 * sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"$namespace\", pod=~\"${app}-.+\", container!=\"\", container!=\"POD\"}[$__rate_interval])) / sum by (pod) (kube_pod_container_resource_requests{namespace=\"$namespace\", pod=~\"${app}-.+\", container!=\"\", container!=\"POD\", resource=\"cpu\"})",
+          "expr": "100 * sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"$namespace\", pod=~\"${app}-.+\", container!=\"\", container!=\"POD\"}[1m])) / sum by (pod) (kube_pod_container_resource_requests{namespace=\"$namespace\", pod=~\"${app}-.+\", container!=\"\", container!=\"POD\", resource=\"cpu\"})",
           "refId": "A",
           "legendFormat": "{{pod}}"
         }
