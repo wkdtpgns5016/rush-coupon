@@ -60,3 +60,16 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+          # 앱이 포트를 열기 전에는 트래픽을 받지 않게 한다. 없으면 컨테이너가 시작되는 순간 바로 Ready 가 되어
+          # HPA 스케일 아웃 직후나 롤링 업데이트 중에 부팅 중인 Pod 로 요청이 가서 502 가 날 수 있다.
+          # /health 는 DB 를 조회하지 않고 http_requests_total 지표에서도 제외된다(backend 의 HttpMetricsModule).
+          # 이 프로브는 /health 를 제공하는 이미지가 배포된 뒤에만 유효하다 — 옛 이미지는 404 를 응답해 Pod 가 Ready 가 되지 않는다.
+          # timeoutSeconds 는 부하 중 최대 지연(약 3.4s)을 감안해 기본값(1s)보다 늘렸다. 3회 연속 실패해야 트래픽에서 빠진다.
+          # livenessProbe 는 일부러 두지 않는다: 과부하로 프로브가 실패하면 재시작되어 상황이 더 나빠진다.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
