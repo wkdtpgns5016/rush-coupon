@@ -6,7 +6,7 @@
 |---|---|
 | 범위 | Issue #31 — `POST /coupons/:id/issue`(비관적 락 기반 발급 API) k6 부하 시나리오 작성 및 성능 측정 |
 | 목적 | "정상 상태" 성능(baseline)과 "선착순 몰림" 상황의 한계(spike)를 측정해 병목(#32) 분석의 입력값을 만든다 |
-| 관련 파일 | [k6/lib/](../../k6/lib/), [k6/scenarios/](../../k6/scenarios/) |
+| 관련 파일 | [k6/lib/](../../k6/lib/), [k6/scenarios/](../../k6/scenarios/), 측정 결과는 [m3-mvp-load-test-report.md](m3-mvp-load-test-report.md) |
 
 ---
 
@@ -149,3 +149,8 @@ docker exec -i rush-coupon-postgres psql -U <POSTGRES_USER> -d <POSTGRES_DB> < k
 ```
 
 시드 쿠폰(`선착순 테스트 쿠폰`)은 제목이 `[k6-`로 시작하지 않아 영향받지 않는다.
+
+## 8. 측정 결과
+
+실제 클러스터 측정값(baseline/spike 수치, Grafana 캡처, 원인 분석)은
+[m3-mvp-load-test-report.md](m3-mvp-load-test-report.md)에 별도로 정리했다.
