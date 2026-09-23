@@ -20,8 +20,23 @@ K6_DIR="$(dirname "$SCRIPT_DIR")"
 k6 run "$K6_DIR/scenarios/${SCENARIO}.js" "$@"
 K6_EXIT=$?
 
+# k6가 끝나도, 그 시점에 백엔드가 이미 받아 처리 중이던 요청(락 대기열에 남아있던 것들)은
+# 클라이언트와 무관하게 계속 커밋된다. 그 커밋이 cleanup 중간에 끼어들면 FK 제약 위반으로
+# 트랜잭션 전체가 롤백되므로, 백엔드 큐가 다 빌 때까지 몇 번 재시도한다.
 echo "테스트 데이터 정리 중 (title LIKE '[k6-%')..."
-PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USERNAME" -d "$DB_DATABASE" \
-  -f "$SCRIPT_DIR/cleanup.sql"
+CLEANUP_ATTEMPTS="${CLEANUP_ATTEMPTS:-5}"
+CLEANUP_RETRY_DELAY="${CLEANUP_RETRY_DELAY:-10}"
+for i in $(seq 1 "$CLEANUP_ATTEMPTS"); do
+  if PGPASSWORD="$DB_PASSWORD" psql -v ON_ERROR_STOP=1 -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USERNAME" -d "$DB_DATABASE" \
+    -f "$SCRIPT_DIR/cleanup.sql"; then
+    break
+  fi
+  if [ "$i" -eq "$CLEANUP_ATTEMPTS" ]; then
+    echo "정리 ${CLEANUP_ATTEMPTS}회 시도 후에도 실패 — 백엔드가 아직 이전 요청을 처리 중일 수 있습니다. 잠시 후 cleanup.sql을 직접 재실행하세요." >&2
+    break
+  fi
+  echo "정리 실패 (백엔드가 아직 큐를 처리 중일 수 있음) — ${CLEANUP_RETRY_DELAY}초 후 재시도 (${i}/${CLEANUP_ATTEMPTS})..."
+  sleep "$CLEANUP_RETRY_DELAY"
+done
 
 exit "$K6_EXIT"
