@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-exporter
+  template:
+    metadata:
+      labels:
+        app: postgres-exporter
+    spec:
+      containers:
+        - name: postgres-exporter
+          image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
+          args:
+            # 부하 테스트 분석에 쓰는 것만 켠다: 트랜잭션/연결/캐시/락 (stat_database, stat_activity, locks, settings).
+            # 쓰지 않는 수집기는 꺼서 스크레이프마다 DB 에 던지는 쿼리와 시계열 수를 줄인다.
+            - --collector.stat_database
+            - --collector.stat_activity
+            - --collector.stat_user_tables
+            - --collector.long_running_transactions
+            - --no-collector.wal
+            - --no-collector.roles
+            - --no-collector.replication
+            - --no-collector.replication_slots
+            - --no-collector.stat_replication
+            - --no-collector.stat_archiver
+            - --no-collector.stat_bgwriter
+            - --no-collector.stat_progress_vacuum
+            - --no-collector.statio_user_tables
+          ports:
+            - name: metrics
+              containerPort: 9187
+          env:
+            # backend 와 같은 시크릿을 재사용한다. DB 는 클러스터 밖이지만 postgres-service(Endpoints)로 이미 연결되어 있다.
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: backend-db-credentials
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: backend-db-credentials
+                  key: DB_PORT
+            - name: DB_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: backend-db-credentials
+                  key: DB_DATABASE
+            - name: DATA_SOURCE_URI
+              # 위에서 정의한 env 를 $(VAR) 로 참조한다 (정의 순서가 앞선 것만 치환됨). backend 와 같이 SSL 없이 접속.
+              value: "$(DB_HOST):$(DB_PORT)/$(DB_DATABASE)?sslmode=disable"
+            - name: DATA_SOURCE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: backend-db-credentials
+                  key: DB_USERNAME
+            - name: DATA_SOURCE_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: backend-db-credentials
+                  key: DB_PASSWORD
+          # "/" 는 랜딩 페이지라 DB 를 조회하지 않는다. (/metrics 는 스크레이프마다 DB 쿼리를 실행하므로 프로브에 쓰지 않는다)
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 9187
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

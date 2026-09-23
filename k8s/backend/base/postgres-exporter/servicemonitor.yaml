@@ -1,0 +1,16 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: postgres-exporter
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: postgres-exporter
+  endpoints:
+    - port: metrics
+      path: /metrics
+      # backend 지표와 같은 주기로 맞춘다 — 대시보드에서 RPS 와 DB 지표를 같은 시간축으로 비교하기 위함
+      interval: 15s
+      scrapeTimeout: 10s
