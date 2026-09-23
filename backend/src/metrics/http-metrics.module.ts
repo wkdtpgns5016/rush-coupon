@@ -22,8 +22,12 @@ const LABEL_NAMES = ['method', 'route', 'status_code'];
       name: HTTP_REQUEST_DURATION_SECONDS,
       help: 'HTTP request duration in seconds',
       labelNames: LABEL_NAMES,
-      // 선착순 발급처럼 수십 ms 단위 지연 변화를 봐야 하므로 기본 버킷보다 촘촘하게 둔다.
-      buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+      // 부하 테스트에서 P95/P99 는 100~500ms 구간에 놓이는데, histogram_quantile 은 버킷 안을 직선으로 보간하므로
+      // 이 구간이 성기면 값이 크게 부정확해진다. 그래서 75/150/200/300/750ms 를 추가해 해상도를 높였다.
+      buckets: [
+        0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.3, 0.5, 0.75, 1, 2.5,
+        5, 10,
+      ],
     }),
     HttpMetricsMiddleware,
   ],

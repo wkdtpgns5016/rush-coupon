@@ -330,6 +330,14 @@ curl -s -o /dev/null -w "/coupons/<id> -> %{http_code}\n" http://<INGRESS_HOST>/
 
 `/targets`에 backend가 아예 없거나 DOWN이면, 배포된 backend 이미지가 `/metrics`를 제공하는 커밋 이후의 것인지(10-3 2번의 이미지 태그)부터 확인하세요.
 
+**DB 지표 확인** — 대시보드의 "데이터베이스" 행은 postgres-exporter가 채웁니다. 9번의 `backend` Application이 이 exporter도 함께 배포하고, backend와 같은 시크릿(`backend-db-credentials`)으로 외부 Postgres에 접속하므로 별도 설정은 없습니다:
+
+```bash
+kubectl -n rush-coupon get pods -l app=postgres-exporter    # 1/1 Running
+```
+
+Prometheus UI(`/targets`)에서 `rush-coupon/postgres-exporter`가 **UP**이고, Graph에서 `pg_up`이 `1`이어야 합니다. `0`이거나 Pod가 `Running`이 아니면 `kubectl -n rush-coupon logs deploy/postgres-exporter`로 접속 오류(3번 Secret 값, 4번 Endpoints)를 확인하세요.
+
 **HPA 확인**
 
 ```bash

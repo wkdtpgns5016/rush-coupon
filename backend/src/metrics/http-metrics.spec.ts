@@ -119,4 +119,34 @@ describe('HTTP metrics', () => {
 
     expect(await scrape()).not.toContain('route="/health"');
   });
+
+  it('uses fine-grained histogram buckets around 100-500ms for P95/P99 resolution', async () => {
+    await request(app.getHttpServer()).get('/').expect(200);
+
+    const text = await scrape();
+    const bounds = [
+      ...text.matchAll(
+        /http_request_duration_seconds_bucket\{le="([^"]+)",method="GET",route="\/",status_code="200"\}/g,
+      ),
+    ].map((m) => m[1]);
+
+    expect(bounds).toEqual([
+      '0.005',
+      '0.01',
+      '0.025',
+      '0.05',
+      '0.075',
+      '0.1',
+      '0.15',
+      '0.2',
+      '0.3',
+      '0.5',
+      '0.75',
+      '1',
+      '2.5',
+      '5',
+      '10',
+      '+Inf',
+    ]);
+  });
 });
