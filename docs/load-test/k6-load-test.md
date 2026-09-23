@@ -20,6 +20,7 @@ k6/
   scenarios/
     baseline.js  # 단일 파드/소규모 트래픽 — 정상 상태 기준선
     spike.js     # 수천 명 동시 발급 — 스파이크/스트레스
+    scaleout.js  # (#32) 목표 요청률을 몇 분간 유지 — HPA 스케일아웃 관찰용
   scripts/
     run.sh        # k6 실행 + 종료 후 cleanup.sql 자동 실행 래퍼
     cleanup.sql    # 테스트 전용 쿠폰([k6-* 접두사])과 발급 이력 삭제
@@ -34,6 +35,11 @@ k6/
 각 발급 요청의 `userId`는 `exec.scenario.iterationInTest`(시나리오 전체에서 단조 증가하는 카운터)로
 만든다. VU/반복 조합과 무관하게 항상 고유해서, 테스트 중 의도치 않은 중복 발급(409)이 섞여
 결과가 왜곡되는 것을 막는다.
+
+`baseline.js`/`spike.js`와 `scaleout.js`는 executor가 다르다. baseline/spike는 "실제 사용자가 몇 명
+동시에 몰리는가"를 흉내내는 게 목적이라 `ramping-vus`/`per-vu-iterations`를 쓰지만, `scaleout.js`는
+"HPA가 여러 단계로 반응할 만큼 충분히 오래(몇 분) 목표 요청률을 유지"하는 게 목적이라
+`ramping-arrival-rate`로 초당 요청 수 자체를 고정한다. 자세한 설계 이유는 `scaleout.js` 상단 주석 참고.
 
 ## 2. 사전 준비
 
@@ -70,6 +76,8 @@ set -a && source .env && set +a
 ./scripts/run.sh baseline
 ./scripts/run.sh spike
 ./scripts/run.sh spike -e SPIKE_VUS=3000   # 값 하나만 덮어쓰기
+./scripts/run.sh scaleout                  # #32 — 몇 분간 지속되는 시나리오라 미리 Grafana 열어둘 것
+                                            # (정리 재시도 예산을 늘려야 할 수 있음 — 7번 참고)
 ```
 
 클러스터 대상은 `.env`의 `BASE_URL`/`SPIKE_VUS`/`DB_*`를 클러스터 값으로 바꾼 뒤 동일하게 실행한다.
@@ -89,6 +97,11 @@ k6 run -e BASE_URL=http://backend.<worker-tailscale-ip>.nip.io -e SPIKE_VUS=3000
 | `COUPON_QUANTITY` | `100000` | setup()에서 생성할 테스트 쿠폰 총 수량 |
 | `SPIKE_VUS` | `3000` | spike.js — 동시에 발급을 시도할 가상 사용자 수 (각자 정확히 1회 요청) |
 | `SPIKE_MAX_DURATION` | `3m` | spike.js — 시나리오 최대 허용 시간 |
+| `SCALEOUT_RATE` | `60` | scaleout.js — 목표 초당 요청 수. #31에서 확인한 커밋 TPS 상한(~30 ops/s)보다 의도적으로 높게 잡아 지속적인 초과 수요를 만듦 |
+| `SCALEOUT_RAMP_DURATION` | `2m` | scaleout.js — 0 → `SCALEOUT_RATE`로 올리는 램프업 시간 |
+| `SCALEOUT_HOLD_DURATION` | `8m` | scaleout.js — `SCALEOUT_RATE`를 유지하는 시간 (HPA가 여러 단계로 반응할 시간을 벌어줌) |
+| `SCALEOUT_RAMP_DOWN_DURATION` | `1m` | scaleout.js — 종료 전 램프다운 시간 |
+| `SCALEOUT_PRE_VUS` / `SCALEOUT_MAX_VUS` | `300` / `2000` | scaleout.js — k6가 미리 띄워둘 VU 수 / 지연으로 쌓이는 요청까지 감당할 최대 VU 수. `MAX_VUS`가 부족하면 "dropped iterations" 경고와 함께 목표 요청률을 못 채움 |
 | `DB_HOST`/`DB_PORT`/`DB_USERNAME`/`DB_PASSWORD`/`DB_DATABASE` | 로컬 docker-compose 기준값 | `scripts/run.sh`가 종료 후 자동 정리(`cleanup.sql`)할 때 쓰는 Postgres 접속 정보. `k6 run`을 직접 쓸 땐 필요 없음 |
 
 `SPIKE_VUS`를 낮은 값(예: 로컬 스모크 테스트는 200~500)으로 먼저 돌려서 스크립트가 정상 동작하는지
@@ -134,6 +147,30 @@ BEGIN
 DELETE 100
 DELETE 1
 COMMIT
+```
+
+**락 경합이 심한 시나리오(spike, scaleout)에서는 정리가 한 번에 안 될 수 있다.** k6가 끝나도, 그
+시점에 백엔드가 이미 받아서 처리 중이던 요청(락 대기열에 남아있던 것들)은 클라이언트와 무관하게
+계속 커밋된다 — 그 커밋이 `coupon_issues` DELETE와 `coupons` DELETE 사이에 끼어들면 FK 제약
+위반으로 트랜잭션 전체가 롤백된다. 그래서 `run.sh`는 정리가 실패하면 기본 5회, 10초 간격으로
+재시도한다(`CLEANUP_ATTEMPTS`/`CLEANUP_RETRY_DELAY` 환경변수로 조정 가능).
+
+**`scaleout.js`는 기본 재시도 예산(5회×10초=50초)으로 부족할 수 있다.** 몇 분간 초과 수요를
+지속시키는 시나리오라 백엔드 큐가 그만큼 깊게 쌓인다 — 실측으로 큐가 완전히 빠지는 데 50초보다
+훨씬 오래 걸린 사례가 있었다(`DELETE` 건수가 재시도마다 계속 늘어나며 실패). `scaleout.js`를
+`run.sh`로 돌릴 땐 재시도 예산을 넉넉히 늘려서 실행한다:
+
+```bash
+CLEANUP_ATTEMPTS=30 CLEANUP_RETRY_DELAY=15 ./scripts/run.sh scaleout   # 최대 7.5분까지 재시도
+```
+
+그래도 실패하면 백엔드 큐가 아직 안 비었다는 뜻이니, Grafana("락 대기 세션" 패널)나 아래 쿼리로
+확인한 뒤 수동 정리를 다시 실행한다:
+
+```sql
+-- lock_waiting이 0이면 큐가 다 빠진 것
+SELECT count(*) FILTER (WHERE wait_event_type = 'Lock') AS lock_waiting, count(*) AS total_active
+FROM pg_stat_activity WHERE state = 'active';
 ```
 
 `k6 run`을 직접 썼거나, `run.sh`가 DB에 TCP로 못 붙는 환경(포트가 안 열려 있는 등)이라면 수동으로
