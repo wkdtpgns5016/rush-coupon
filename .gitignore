@@ -19,3 +19,8 @@ dist/
 build/
 backend/dist/
 frontend/dist/
+
+# k6 부하 테스트 결과 (실행 시마다 생성되는 원시 산출물, 리포트에 필요한 값만 문서화해서 남김)
+# .gitkeep으로 디렉토리 자체는 유지 — handleSummary()가 파일을 쓸 때 디렉토리가 없으면 실패한다.
+k6/results/*
+!k6/results/.gitkeep
