@@ -1,0 +1,1 @@
+export const RABBITMQ_CHANNEL = 'RABBITMQ_CHANNEL';

@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+} from '@nestjs/common';
 import { CouponsService } from './coupons.service';
 import { CreateCouponDto } from './dto/create-coupon.dto';
 import { IssueCouponDto } from './dto/issue-coupon.dto';
@@ -18,7 +26,8 @@ export class CouponsController {
   }
 
   @Post(':id/issue')
+  @HttpCode(HttpStatus.ACCEPTED)
   issue(@Param('id') id: string, @Body() dto: IssueCouponDto) {
-    return this.couponsService.issueWithPessimisticLock(id, dto.userId);
+    return this.couponsService.issue(id, dto.userId);
   }
 }
