@@ -4,9 +4,8 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
+import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
-import * as amqplib from 'amqplib';
 import type { ConfirmChannel } from 'amqplib';
 import Redis from 'ioredis';
 import { DataSource } from 'typeorm';
@@ -19,20 +18,10 @@ import { CouponsService } from './coupons.service';
 import { Coupon } from './entities/coupon.entity';
 import { CouponIssue } from './entities/coupon-issue.entity';
 import { RABBITMQ_CHANNEL } from '../rabbitmq/rabbitmq.constants';
+import { connectTestChannel, TestChannel } from '../test-utils/rabbitmq-test-channel';
 import { VALKEY_CLIENT } from '../valkey/valkey.constants';
 
 jest.setTimeout(30000);
-
-async function connectTestChannel(): Promise<ConfirmChannel> {
-  const host = process.env.TEST_RABBITMQ_HOST ?? 'localhost';
-  const port = process.env.TEST_RABBITMQ_PORT ?? '5673';
-  const username = process.env.TEST_RABBITMQ_USERNAME ?? 'rush';
-  const password = process.env.TEST_RABBITMQ_PASSWORD ?? 'rush';
-  const connection = await amqplib.connect(
-    `amqp://${username}:${password}@${host}:${port}/`,
-  );
-  return connection.createConfirmChannel();
-}
 
 async function purgeQueue(channel: ConfirmChannel): Promise<void> {
   try {
@@ -47,10 +36,11 @@ describe('CouponsService (async issuance integration)', () => {
   let couponStockService: CouponStockService;
   let dataSource: DataSource;
   let valkeyClient: Redis;
-  let rabbitmqChannel: ConfirmChannel;
+  let rabbitmqChannel: TestChannel;
+  let moduleRef: TestingModule;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
+    moduleRef = await Test.createTestingModule({
       imports: [
         TypeOrmModule.forRoot({
           type: 'postgres',
@@ -97,9 +87,13 @@ describe('CouponsService (async issuance integration)', () => {
   });
 
   afterAll(async () => {
-    await dataSource.destroy();
+    // moduleRef.close()가 Nest 라이프사이클(onApplicationShutdown)로 DataSource를 닫아준다.
+    // 별도로 dataSource.destroy()를 부르면 이중 종료로 에러가 나 이후 정리 코드가 실행되지 않는다.
+    await moduleRef.close();
     valkeyClient.disconnect();
-    await rabbitmqChannel.close();
+    // channel.close()는 AMQP 채널만 닫고 TCP 연결은 남겨둔다 — 연결 자체를 닫아야
+    // 프로세스가 열린 소켓 없이 정상 종료된다.
+    await rabbitmqChannel.rawConnection.close();
   });
 
   async function countQueueMessages(): Promise<number> {
