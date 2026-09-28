@@ -75,5 +75,26 @@ services:
     ports:
       - "3000:3000"
 
+  worker:
+    build: .
+    container_name: rush-coupon-worker-local
+    restart: unless-stopped
+    command: ["node", "dist/worker.main.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_DATABASE: ${DB_DATABASE:-rush_coupon}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-rush}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-rush}
+
 volumes:
   pgdata:

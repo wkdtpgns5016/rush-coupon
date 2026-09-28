@@ -12,6 +12,20 @@ export interface CouponIssuedMessage {
   requestedAt: string;
 }
 
+// backend(발행)와 worker(구독)는 서로 다른 Nest 애플리케이션이라, 둘 중 무엇이 먼저 떠도
+// 토폴로지가 준비되도록 양쪽 onModuleInit에서 이 선언을 그대로 재사용한다.
+export async function declareCouponIssuedTopology(
+  channel: ConfirmChannel,
+): Promise<void> {
+  await channel.assertExchange(COUPON_EXCHANGE, 'direct', { durable: true });
+  await channel.assertQueue(COUPON_ISSUED_QUEUE, { durable: true });
+  await channel.bindQueue(
+    COUPON_ISSUED_QUEUE,
+    COUPON_EXCHANGE,
+    COUPON_ISSUED_ROUTING_KEY,
+  );
+}
+
 @Injectable()
 export class CouponEventPublisher implements OnModuleInit {
   constructor(
@@ -19,15 +33,7 @@ export class CouponEventPublisher implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    await this.channel.assertExchange(COUPON_EXCHANGE, 'direct', {
-      durable: true,
-    });
-    await this.channel.assertQueue(COUPON_ISSUED_QUEUE, { durable: true });
-    await this.channel.bindQueue(
-      COUPON_ISSUED_QUEUE,
-      COUPON_EXCHANGE,
-      COUPON_ISSUED_ROUTING_KEY,
-    );
+    await declareCouponIssuedTopology(this.channel);
   }
 
   publishCouponIssued(message: CouponIssuedMessage): Promise<void> {
