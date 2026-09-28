@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbitmq
+spec:
+  replicas: 1
+  # local-path-provisioner의 PV는 노드 로컬 디스크(hostPath)라 ReadWriteOnce다.
+  # 기본 RollingUpdate로는 새 Pod가 같은 PVC를 물려고 하다가 기존 Pod와 충돌해 Pending에 빠진다.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+    spec:
+      # rabbitmq 이미지의 내장 계정(uid=100/gid=101)으로 강제 실행한다. fsGroup으로 PVC 볼륨의
+      # 그룹 소유권을 맞춰줘야 root가 아닌 이 유저가 /var/lib/rabbitmq에 쓸 수 있다.
+      securityContext:
+        fsGroup: 101
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:4-alpine
+          ports:
+            - name: amqp
+              containerPort: 5672
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credentials
+                  key: RABBITMQ_USERNAME
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credentials
+                  key: RABBITMQ_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "ping"]
+            # 큐/바인딩 초기화까지 포함해 postgres/valkey보다 기동이 느려 초기 지연을 넉넉히 둔다.
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 200Mi
+            limits:
+              cpu: 500m
+              memory: 400Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 100
+            runAsGroup: 101
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: rabbitmq-data
+        - name: tmp
+          emptyDir: {}
