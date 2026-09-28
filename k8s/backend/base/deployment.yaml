@@ -53,6 +53,11 @@ spec:
                 secretKeyRef:
                   name: backend-db-credentials
                   key: DB_PASSWORD
+            # valkey는 자격증명 없는 클러스터 내부 Service라 시크릿 없이 평문으로 둔다.
+            - name: VALKEY_HOST
+              value: valkey
+            - name: VALKEY_PORT
+              value: "6379"
           resources:
             requests:
               cpu: 100m
