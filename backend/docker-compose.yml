@@ -31,6 +31,23 @@ services:
       timeout: 5s
       retries: 5
 
+  rabbitmq:
+    image: rabbitmq:4-alpine
+    container_name: rush-coupon-rabbitmq-local
+    restart: unless-stopped
+    environment:
+      # guest 계정은 RabbitMQ가 loopback 연결만 허용해서, 호스트에서 발행 포트로 접속하면
+      # (Docker 포트포워딩이 loopback으로 보이는 경우) 핸드셰이크 도중 연결이 끊긴다. 그래서 별도 계정을 만든다.
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-rush}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-rush}
+    ports:
+      - "${RABBITMQ_LOCAL_PORT:-5673}:5672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build: .
     container_name: rush-coupon-backend-local
@@ -40,6 +57,8 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
@@ -48,6 +67,10 @@ services:
       DB_DATABASE: ${DB_DATABASE:-rush_coupon}
       VALKEY_HOST: valkey
       VALKEY_PORT: 6379
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-rush}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-rush}
       PORT: 3000
     ports:
       - "3000:3000"

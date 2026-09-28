@@ -2,21 +2,25 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
-import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, QueryFailedError, Repository } from 'typeorm';
-import { CouponStockService } from './coupon-stock.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { CouponEventPublisher } from './coupon-event-publisher.service';
+import { CouponStockService, StockReservationResult } from './coupon-stock.service';
 import { Coupon } from './entities/coupon.entity';
-import { CouponIssue } from './entities/coupon-issue.entity';
 import { CreateCouponDto } from './dto/create-coupon.dto';
 
 @Injectable()
 export class CouponsService {
+  private readonly logger = new Logger(CouponsService.name);
+
   constructor(
-    @InjectDataSource() private readonly dataSource: DataSource,
     @InjectRepository(Coupon) private readonly couponRepo: Repository<Coupon>,
     private readonly couponStockService: CouponStockService,
+    private readonly couponEventPublisher: CouponEventPublisher,
   ) {}
 
   async create(dto: CreateCouponDto): Promise<Coupon> {
@@ -39,64 +43,39 @@ export class CouponsService {
     return coupon;
   }
 
-  async issueWithPessimisticLock(
-    couponId: string,
-    userId: string,
-  ): Promise<CouponIssue> {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+  // Valkey에서 재고/중복을 원자적으로 판정한 뒤, 통과한 요청만 RabbitMQ에 발행하고 즉시 202로 응답한다.
+  // DB 영속화는 Worker(별도 이슈)가 큐를 consume해 비동기로 처리한다.
+  async issue(couponId: string, userId: string): Promise<{ status: 'ACCEPTED' }> {
+    const result = await this.couponStockService.reserve(couponId, userId);
+
+    if (result === StockReservationResult.NOT_WARMED) {
+      throw new NotFoundException(`쿠폰을 찾을 수 없습니다. id=${couponId}`);
+    }
+    if (result === StockReservationResult.SOLD_OUT) {
+      throw new BadRequestException('쿠폰 재고가 모두 소진되었습니다.');
+    }
+    if (result === StockReservationResult.DUPLICATE) {
+      throw new ConflictException('이미 발급받은 쿠폰입니다.');
+    }
 
     try {
-      const coupon = await queryRunner.manager.findOne(Coupon, {
-        where: { id: couponId },
-        lock: { mode: 'pessimistic_write' },
-      });
-
-      if (!coupon) {
-        throw new NotFoundException(`쿠폰을 찾을 수 없습니다. id=${couponId}`);
-      }
-
-      const now = new Date();
-      if (now < coupon.startAt || now > coupon.endAt) {
-        throw new BadRequestException('쿠폰 발급 기간이 아닙니다.');
-      }
-
-      if (coupon.issuedQuantity >= coupon.totalQuantity) {
-        throw new BadRequestException('쿠폰 재고가 모두 소진되었습니다.');
-      }
-
-      const alreadyIssued = await queryRunner.manager.findOne(CouponIssue, {
-        where: { couponId, userId },
-      });
-      if (alreadyIssued) {
-        throw new ConflictException('이미 발급받은 쿠폰입니다.');
-      }
-
-      const issue = queryRunner.manager.create(CouponIssue, {
+      await this.couponEventPublisher.publishCouponIssued({
         couponId,
         userId,
+        requestedAt: new Date().toISOString(),
       });
-      await queryRunner.manager.save(issue);
-
-      coupon.issuedQuantity += 1;
-      await queryRunner.manager.save(coupon);
-
-      await queryRunner.commitTransaction();
-      return issue;
     } catch (err) {
-      await queryRunner.rollbackTransaction();
-
-      if (
-        err instanceof QueryFailedError &&
-        (err.driverError as { code?: string })?.code === '23505'
-      ) {
-        throw new ConflictException('이미 발급받은 쿠폰입니다.');
-      }
-
-      throw err;
-    } finally {
-      await queryRunner.release();
+      // "유령 차감" 방지: 메시지 발행이 실패하면 Valkey에 반영된 예약(재고 차감·중복 방지 등록)을 되돌린다.
+      await this.couponStockService.release(couponId, userId);
+      this.logger.error(
+        `쿠폰 발급 이벤트 발행 실패 couponId=${couponId} userId=${userId}`,
+        err instanceof Error ? err.stack : err,
+      );
+      throw new ServiceUnavailableException(
+        '쿠폰 발급 처리에 실패했습니다. 다시 시도해주세요.',
+      );
     }
+
+    return { status: 'ACCEPTED' };
   }
 }
