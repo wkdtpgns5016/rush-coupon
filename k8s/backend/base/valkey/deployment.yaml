@@ -36,7 +36,11 @@ spec:
               cpu: 200m
               memory: 256Mi
           securityContext:
+            # valkey/valkey:8-alpine의 기본 유저는 root라 runAsNonRoot만으로는 CreateContainerConfigError가 난다.
+            # 이미지에 내장된 non-root 계정(valkey, uid=999/gid=1000)을 명시적으로 지정한다.
             runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 1000
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:
