@@ -1,16 +1,20 @@
 import { ConflictException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import Redis from 'ioredis';
 import { DataSource } from 'typeorm';
+import { CouponStockService } from './coupon-stock.service';
 import { CouponsService } from './coupons.service';
 import { Coupon } from './entities/coupon.entity';
 import { CouponIssue } from './entities/coupon-issue.entity';
+import { VALKEY_CLIENT } from '../valkey/valkey.constants';
 
 jest.setTimeout(30000);
 
 describe('CouponsService (concurrency integration)', () => {
   let service: CouponsService;
   let dataSource: DataSource;
+  let valkeyClient: Redis;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -27,21 +31,35 @@ describe('CouponsService (concurrency integration)', () => {
         }),
         TypeOrmModule.forFeature([Coupon, CouponIssue]),
       ],
-      providers: [CouponsService],
+      providers: [
+        CouponsService,
+        CouponStockService,
+        {
+          provide: VALKEY_CLIENT,
+          useFactory: () =>
+            new Redis({
+              host: process.env.TEST_VALKEY_HOST ?? 'localhost',
+              port: Number(process.env.TEST_VALKEY_PORT ?? 6380),
+            }),
+        },
+      ],
     }).compile();
 
     service = moduleRef.get(CouponsService);
     dataSource = moduleRef.get(DataSource);
+    valkeyClient = moduleRef.get(VALKEY_CLIENT);
   });
 
   beforeEach(async () => {
     await dataSource.query(
       'TRUNCATE TABLE coupon_issues, coupons RESTART IDENTITY CASCADE',
     );
+    await valkeyClient.flushdb();
   });
 
   afterAll(async () => {
     await dataSource.destroy();
+    valkeyClient.disconnect();
   });
 
   it('한정 수량을 초과해서 발급하지 않는다 (재고 100개 / 동시 요청 200건)', async () => {
