@@ -22,3 +22,8 @@ replacements:
           name: backend
         fieldPaths:
           - spec.template.spec.containers.0.image
+      - select:
+          kind: Deployment
+          name: worker
+        fieldPaths:
+          - spec.template.spec.containers.0.image

@@ -11,3 +11,4 @@ resources:
   - postgres-exporter
   - valkey
   - rabbitmq
+  - worker
