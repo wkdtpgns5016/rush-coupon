@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
+import { CouponStockService } from './coupon-stock.service';
 import { Coupon } from './entities/coupon.entity';
 import { CouponIssue } from './entities/coupon-issue.entity';
 import { CreateCouponDto } from './dto/create-coupon.dto';
@@ -15,6 +16,7 @@ export class CouponsService {
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     @InjectRepository(Coupon) private readonly couponRepo: Repository<Coupon>,
+    private readonly couponStockService: CouponStockService,
   ) {}
 
   async create(dto: CreateCouponDto): Promise<Coupon> {
@@ -24,7 +26,9 @@ export class CouponsService {
       startAt: new Date(dto.startAt),
       endAt: new Date(dto.endAt),
     });
-    return this.couponRepo.save(coupon);
+    const saved = await this.couponRepo.save(coupon);
+    await this.couponStockService.warmStock(saved.id, saved.totalQuantity);
+    return saved;
   }
 
   async findOne(id: string): Promise<Coupon> {
