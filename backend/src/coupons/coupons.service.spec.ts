@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import type { ConfirmChannel } from 'amqplib';
@@ -19,9 +20,17 @@ import { Coupon } from './entities/coupon.entity';
 import { CouponIssue } from './entities/coupon-issue.entity';
 import { RABBITMQ_CHANNEL } from '../rabbitmq/rabbitmq.constants';
 import { connectTestChannel, TestChannel } from '../test-utils/rabbitmq-test-channel';
+import { TEST_RETRY_TTL_MS } from '../test-utils/retry-ttl';
 import { VALKEY_CLIENT } from '../valkey/valkey.constants';
 
 jest.setTimeout(30000);
+
+// 이 스펙은 재시도 자체를 테스트하지 않지만, CouponEventPublisher가 declareCouponIssuedTopology로
+// 같은 이름의 재시도 큐를 선언한다 — 다른 스펙(worker)과 같은 실제 브로커를 공유하므로 TTL 값을
+// 반드시 통일해야 406(PRECONDITION_FAILED)이 안 난다.
+process.env.RETRY_TTL_2S_MS = String(TEST_RETRY_TTL_MS[0]);
+process.env.RETRY_TTL_8S_MS = String(TEST_RETRY_TTL_MS[1]);
+process.env.RETRY_TTL_32S_MS = String(TEST_RETRY_TTL_MS[2]);
 
 async function purgeQueue(channel: ConfirmChannel): Promise<void> {
   try {
@@ -42,6 +51,7 @@ describe('CouponsService (async issuance integration)', () => {
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
       imports: [
+        ConfigModule.forRoot({ isGlobal: true }),
         TypeOrmModule.forRoot({
           type: 'postgres',
           host: process.env.TEST_DB_HOST ?? 'localhost',
