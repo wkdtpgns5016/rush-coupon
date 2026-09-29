@@ -8,7 +8,7 @@
 | 측정일 | 2026-09-23 |
 | 대상 | 클러스터 (`INGRESS_HOST`), HPA `min=2 max=10` |
 | 결론 | 비관적 락(행 락) 직렬화가 처리량 상한(~30 ops/s)의 직접 원인. 부하 패턴·지속 시간을 바꿔도, 파드가 자연 확장돼도 상한은 그대로 — 커넥션 풀/DB CPU/파드 수는 병목이 아님 |
-| 관련 파일 | [k6-load-test.md](k6-load-test.md) (실행 방법), [results/m3/](results/m3/) (Grafana 캡처), #36 (히스토그램 버킷 수정) |
+| 관련 파일 | [m3-k6-load-test.md](m3-k6-load-test.md) (실행 방법), [results/m3/](results/m3/) (Grafana 캡처), #36 (히스토그램 버킷 수정) |
 
 ---
 
