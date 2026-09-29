@@ -7,6 +7,9 @@
 //     락 경합이 실제 병목이라면 파드가 아무리 늘어나도 처리량이 그 상한 근처에 눌려 있는지,
 //     아니면 파드 수 증가에 따라 실제로 뚫리는지를 몇 분 단위로 Grafana(HPA/오토스케일링,
 //     postgres-exporter 락 대기/커넥션)와 대조해서 확인한다.
+// M5(#47)부터는 비관적 락이 아니라 Valkey+RabbitMQ 비동기 아키텍처가 대상이다 — API/Worker
+// 파드 각각의 HPA 확장 여부와 RabbitMQ 큐 길이 추이를 Grafana로 관찰하고, 여기서 재는 지연은
+// "API 응답 지연"(202까지)만이며 종단 지연은 k6/scripts/latency-report.sql로 별도 계산한다.
 import http from 'k6/http';
 import { check } from 'k6';
 import exec from 'k6/execution';
@@ -25,9 +28,11 @@ const RAMP_DOWN_DURATION = __ENV.SCALEOUT_RAMP_DOWN_DURATION || '1m';
 const PRE_ALLOCATED_VUS = Number(__ENV.SCALEOUT_PRE_VUS || 300);
 const MAX_VUS = Number(__ENV.SCALEOUT_MAX_VUS || 2000);
 
-const issued = new Counter('coupon_issued_total');
+const accepted = new Counter('coupon_accepted_total');
 const soldOut = new Counter('coupon_sold_out_total');
+const notFound = new Counter('coupon_not_found_total');
 const duplicate = new Counter('coupon_duplicate_total');
+const unavailable = new Counter('coupon_unavailable_total');
 const unexpected = new Counter('coupon_unexpected_total');
 const issueDuration = new Trend('coupon_issue_duration', true);
 
@@ -73,12 +78,15 @@ export function issue(data) {
 
   issueDuration.add(res.timings.duration);
   check(res, {
-    '예상된 응답 코드 (201/400/409)': (r) => [201, 400, 409].includes(r.status),
+    '예상된 응답 코드 (202/400/404/409/503)': (r) =>
+      [202, 400, 404, 409, 503].includes(r.status),
   });
 
-  if (res.status === 201) issued.add(1);
+  if (res.status === 202) accepted.add(1);
   else if (res.status === 400) soldOut.add(1);
+  else if (res.status === 404) notFound.add(1);
   else if (res.status === 409) duplicate.add(1);
+  else if (res.status === 503) unavailable.add(1);
   else unexpected.add(1);
 }
 
