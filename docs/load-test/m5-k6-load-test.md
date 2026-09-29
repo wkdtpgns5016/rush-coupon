@@ -78,27 +78,28 @@ cp .env.example .env   # 값 채우기 (BASE_URL, SPIKE_VUS, DB_* 등)
 set -a && source .env && set +a
 ```
 
-**권장: `scripts/run.sh`로 실행** — k6를 돌리고, 끝나면 `cleanup.sql`로 테스트 쿠폰을 자동 정리한다
-(자세한 내용은 7번). k6에 넘기고 싶은 추가 인자는 시나리오 이름 뒤에 그대로 붙인다:
+**권장: `scripts/run.sh`로 실행** — k6를 돌리고, (#47) Worker 배출이 끝나길 기다려
+`latency-report.sql`로 종단 지연을 계산한 뒤, `cleanup.sql`로 테스트 쿠폰을 자동 정리한다
+(자세한 내용은 5-2, 7번). k6에 넘기고 싶은 추가 인자는 시나리오 이름 뒤에 그대로 붙인다:
 
 ```bash
 ./scripts/run.sh baseline
 ./scripts/run.sh spike
 ./scripts/run.sh spike -e SPIKE_VUS=3000   # 값 하나만 덮어쓰기
 ./scripts/run.sh scaleout                  # 몇 분간 지속되는 시나리오라 미리 Grafana 열어둘 것
-                                            # (정리 재시도 예산을 늘려야 할 수 있음 — 7번 참고)
+                                            # (배출/정리 재시도 예산을 늘려야 할 수 있음 — 5-2, 7번 참고)
 ```
 
 클러스터 대상은 `.env`의 `BASE_URL`/`SPIKE_VUS`/`DB_*`를 클러스터 값으로 바꾼 뒤 동일하게 실행한다.
 
-**(#47) 종단 지연까지 잴 계획이면 `run.sh`를 바로 쓰지 말 것** — 자동 정리가 `coupon_issues`를
-지워버려 `latency-report.sql`로 계산할 데이터가 사라진다. `k6 run`을 직접 호출해 cleanup을
-미루거나, cleanup 실행 전에 5번(결과 해석) 순서대로 진행한다:
+자동 정리 없이 `k6 run`만 직접 돌리고 싶을 때(예: 정리 전 DB 상태를 눈으로 먼저 보고 싶을 때)는:
 
 ```bash
 k6 run scenarios/baseline.js
 k6 run -e BASE_URL=http://backend.<worker-tailscale-ip>.nip.io -e SPIKE_VUS=3000 scenarios/spike.js
 ```
+
+이 경우 종단 지연은 5-2의 `latency-report.sql`을 직접 실행해서 계산한다.
 
 ### 환경변수
 
@@ -145,7 +146,21 @@ k6 run -e BASE_URL=http://backend.<worker-tailscale-ip>.nip.io -e SPIKE_VUS=3000
 k6는 202 응답만 보고 실제 DB 반영 여부/시각을 알 수 없어서, "큐 적재부터 Worker가 실제로 배치
 INSERT를 끝낼 때까지" 걸리는 지연은 k6 지표에 없다. 이 지연은 테스트가 끝난 뒤
 `coupon_issues.requested_at`(RabbitMQ 발행 시각)과 `issued_at`(배치 저장 완료 시각)의 차이로
-DB에서 직접 계산한다:
+DB에서 직접 계산한다.
+
+**`scripts/run.sh`로 실행했다면 자동으로 계산된다** — k6가 끝나면 `coupon_issues` row count가
+두 번 연속 같게 나올 때까지 폴링해 Worker 배출 완료를 기다린 뒤(`DRAIN_POLL_ATTEMPTS`×
+`DRAIN_POLL_INTERVAL`, 기본 12회×5초), `latency-report.sql`을 실행하고 결과를
+`results/<scenario>-latency-<timestamp>.txt`에 남긴 다음에 `cleanup.sql`을 돌린다.
+`scaleout`처럼 백로그가 깊어 배출이 오래 걸리는 시나리오는 기본 대기 예산(60초)이 부족할 수
+있다 — 이 경우 row count가 계속 늘어난다는 경고가 뜨니, 다음처럼 예산을 늘려서 재실행한다:
+
+```bash
+DRAIN_POLL_ATTEMPTS=60 DRAIN_POLL_INTERVAL=15 ./scripts/run.sh scaleout   # 최대 15분까지 대기
+```
+
+`k6 run`을 직접 썼거나 자동 계산을 건너뛰고 싶다면 직접 실행한다 (**반드시 `cleanup.sql`보다
+먼저** — cleanup이 `coupon_issues` 행을 지우면 계산할 데이터가 함께 사라진다):
 
 ```bash
 PGPASSWORD=<DB_PASSWORD> psql -h <DB_HOST> -p <DB_PORT> -U <DB_USERNAME> -d <DB_DATABASE> \
@@ -153,8 +168,6 @@ PGPASSWORD=<DB_PASSWORD> psql -h <DB_HOST> -p <DB_PORT> -U <DB_USERNAME> -d <DB_
 ```
 
 `[k6-baseline]`/`[k6-spike]`/`[k6-scaleout]` 쿠폰 제목별로 건수·avg·p50·p95·p99·max(ms)를 보여준다.
-**반드시 7번의 자동 정리(cleanup.sql)보다 먼저 실행한다** — cleanup이 `coupon_issues` 행을
-지우면 계산할 데이터가 함께 사라진다.
 
 API 응답 지연(5-1)과 종단 지연(5-2)을 나란히 보면, "즉시 응답은 빠른데 실제 반영은 얼마나
 밀리는가"(큐 적체)가 드러난다 — 이 두 수치가 M3 vs M5 비교표(#49)의 핵심 입력이다.
@@ -188,15 +201,16 @@ Prometheus는 `emptyDir`(retention 3d)이라 결과는 테스트 직후에 캡�
 쌓인다. [k6/scripts/cleanup.sql](../../k6/scripts/cleanup.sql)이 이 제목 접두사를 기준으로
 `coupon_issues` → `coupons` 순서로(FK 제약 순서) 지운다.
 
-**`scripts/run.sh`로 실행했다면 자동으로 정리된다** — k6가 끝나자마자 `.env`의 `DB_*` 값으로
-`psql -f cleanup.sql`을 이어서 실행한다. **종단 지연을 잴 계획이면 cleanup 전에 반드시
-`latency-report.sql`부터 실행한다** (5-2 참고).
+**`scripts/run.sh`로 실행했다면 자동으로 정리된다** — k6가 끝나면 (5-2에서 설명한 배출 대기 +
+`latency-report.sql` 실행을 먼저 마친 뒤) `.env`의 `DB_*` 값으로 `psql -f cleanup.sql`을
+이어서 실행한다.
 
 **높은 부하 시나리오(spike, scaleout)에서는 정리가 한 번에 안 될 수 있다.** M3는 원인이 락
-대기열이었지만, M5는 원인이 다르다 — k6가 끝나도 그 시점에 RabbitMQ 큐에 아직 남아있던
-메시지를 Worker가 계속 consume해 커밋한다. 그 커밋이 `coupon_issues` DELETE와 `coupons`
-DELETE 사이에 끼어들면 FK 제약 위반으로 트랜잭션 전체가 롤백된다. `run.sh`는 정리가 실패하면
-기본 5회, 10초 간격으로 재시도한다(`CLEANUP_ATTEMPTS`/`CLEANUP_RETRY_DELAY` 환경변수로 조정 가능).
+대기열이었지만, M5는 원인이 다르다 — 5-2의 배출 대기(`DRAIN_POLL_ATTEMPTS`)가 끝난 뒤에도
+RabbitMQ 큐에 아직 남아있던 메시지를 Worker가 계속 consume해 커밋할 수 있다. 그 커밋이
+`coupon_issues` DELETE와 `coupons` DELETE 사이에 끼어들면 FK 제약 위반으로 트랜잭션 전체가
+롤백된다. `run.sh`는 정리가 실패하면 기본 5회, 10초 간격으로 재시도한다
+(`CLEANUP_ATTEMPTS`/`CLEANUP_RETRY_DELAY` 환경변수로 조정 가능).
 
 `scaleout.js`처럼 몇 분간 초과 수요를 지속시킨 경우 재시도 예산을 넉넉히 늘린다:
 
@@ -220,6 +234,6 @@ docker exec -i rush-coupon-postgres psql -U <POSTGRES_USER> -d <POSTGRES_DB> < k
 
 ## 8. 측정 결과
 
-클러스터 대상 실제 측정값(baseline/spike/scaleout 수치, API 응답 지연 vs 종단 지연, HPA/큐 길이
-Grafana 캡처)은 테스트 실행 후 M3 리포트와 같은 포맷으로 별도 문서에 정리한다 (#49 비교표의
-원자료).
+실제 클러스터 측정값(baseline/spike/scaleout 수치, API 응답 지연 vs 종단 지연, HPA/큐 길이
+Grafana 캡처, M3 대비 비교)은
+[m5-async-load-test-report.md](m5-async-load-test-report.md)에 정리했다 (#49 비교표의 원자료).
