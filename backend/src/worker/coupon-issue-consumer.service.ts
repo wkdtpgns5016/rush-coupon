@@ -95,8 +95,12 @@ export class CouponIssueConsumerService implements OnModuleInit, OnModuleDestroy
   private parsePayload(message: ConsumeMessage): CouponIssuedMessage | null {
     try {
       const parsed: unknown = JSON.parse(message.content.toString('utf-8'));
-      const { couponId, userId } = parsed as Partial<CouponIssuedMessage>;
-      if (typeof couponId !== 'string' || typeof userId !== 'string') {
+      const { couponId, userId, requestedAt } = parsed as Partial<CouponIssuedMessage>;
+      if (
+        typeof couponId !== 'string' ||
+        typeof userId !== 'string' ||
+        typeof requestedAt !== 'string'
+      ) {
         return null;
       }
       return parsed as CouponIssuedMessage;
@@ -122,6 +126,7 @@ export class CouponIssueConsumerService implements OnModuleInit, OnModuleDestroy
           batch.map(({ payload }) => ({
             couponId: payload.couponId,
             userId: payload.userId,
+            requestedAt: new Date(payload.requestedAt),
           })),
         )
         // at-least-once 전달이라, INSERT는 성공했는데 ack 직전에 워커가 죽으면 같은 메시지가
