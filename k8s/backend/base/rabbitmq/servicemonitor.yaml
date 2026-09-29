@@ -1,0 +1,20 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rabbitmq
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: rabbitmq
+  endpoints:
+    # 기본 /metrics는 큐별 구분 없이 합산값만 준다. coupon.issued.dlq 같은 큐 단위 길이는
+    # /metrics/detailed?family=queue_coarse_metrics에만 rabbitmq_detailed_queue_messages{queue=...}
+    # 라벨로 나온다.
+    - port: metrics
+      path: /metrics/detailed
+      params:
+        family: ["queue_coarse_metrics"]
+      interval: 15s
+      scrapeTimeout: 10s

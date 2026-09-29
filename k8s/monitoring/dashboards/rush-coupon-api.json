@@ -124,6 +124,25 @@
             "value": "postgres-exporter"
           }
         ]
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "rabbitmq",
+          "value": "rabbitmq"
+        },
+        "hide": 2,
+        "label": "RabbitMQ",
+        "name": "rabbitmq",
+        "options": [
+          {
+            "selected": true,
+            "text": "rabbitmq",
+            "value": "rabbitmq"
+          }
+        ],
+        "query": "rabbitmq",
+        "type": "constant"
       }
     ]
   },
@@ -3132,6 +3151,207 @@
               "legendFormat": "송신"
             }
           ]
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "type": "row",
+      "title": "메시지 큐 (RabbitMQ 재시도 / DLQ)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 83
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 43,
+      "type": "stat",
+      "title": "DLQ 길이 (현재)",
+      "description": "coupon.issued.dlq 에 격리된 메시지 수. 재시도(2s/8s/32s)를 전부 소진한 뒤에도 실패한 건이라 0이 아니면 사람이 원인을 봐야 한다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 84
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "rabbitmq_detailed_queue_messages{namespace=\"$namespace\", job=\"$rabbitmq\", queue=\"coupon.issued.dlq\"} or vector(0)",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 44,
+      "type": "stat",
+      "title": "메인 처리 큐 길이 (현재)",
+      "description": "coupon.issued 에 쌓여 Worker의 consume 을 기다리는 메시지 수. 꾸준히 늘기만 하면 Worker 처리량이 유입 속도를 못 따라가는 것.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 84
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "rabbitmq_detailed_queue_messages{namespace=\"$namespace\", job=\"$rabbitmq\", queue=\"coupon.issued\"} or vector(0)",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 45,
+      "type": "timeseries",
+      "title": "큐 길이 추이 (메인 / 재시도 단계 / DLQ)",
+      "description": "coupon.retry.2s/8s/32s 는 컨슈머 없는 대기실이라 쌓여도 정상 — TTL 만료를 기다리는 중이다. coupon.issued.dlq 가 늘어나는 구간이 실제로 봐야 할 부분.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 88
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (queue) (rabbitmq_detailed_queue_messages{namespace=\"$namespace\", job=\"$rabbitmq\", queue=~\"coupon\\\\..*\"})",
+          "legendFormat": "{{queue}}",
+          "refId": "A"
         }
       ]
     }

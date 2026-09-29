@@ -8,6 +8,7 @@ rush-coupon **애플리케이션 쪽** 모니터링 리소스입니다. Promethe
 | backend `/metrics` 수집 (ServiceMonitor, 15s) | `k8s/backend/base/servicemonitor.yaml` | ArgoCD `backend` Application이 자동 적용 |
 | backend HPA (2~10, CPU 70% / 메모리 80%) | `k8s/backend/base/hpa.yaml` | ArgoCD가 자동 적용 |
 | PostgreSQL 지표 수집 (postgres-exporter + ServiceMonitor, 15s) | `k8s/backend/base/postgres-exporter/` | ArgoCD `backend` Application이 자동 적용 |
+| RabbitMQ 지표 수집 (내장 rabbitmq_prometheus + ServiceMonitor, 15s) | `k8s/backend/base/rabbitmq/servicemonitor.yaml` | ArgoCD `backend` Application이 자동 적용 |
 | Grafana 대시보드 "Rush Coupon API" | `k8s/monitoring/dashboards/rush-coupon-api.json` | 아래 `kubectl apply -k` (ArgoCD 추적 대상 아님) |
 
 ## 대시보드 적용
@@ -29,6 +30,7 @@ Grafana 사이드카가 잠시 뒤 자동으로 읽습니다. 대시보드는 �
 | 오토스케일링 | 스케일링이 제때 됐나 | replicas, CPU 사용률(Pod별 + HPA 기준 평균), CPU 쓰로틀링, Pending Pod |
 | 데이터베이스 | 병목이 DB인가 | 락 대기 세션, 커넥션 사용률, TPS, 캐시 적중률, 세션 상태, 행 처리량, 데드락 |
 | 쿠폰 발급 결과 | 정합성이 지켜졌나 | 201/400/409/5xx 분포와 전환 시점 |
+| 메시지 큐 (RabbitMQ) | 재시도가 쌓이거나 격리되고 있나 | DLQ 길이(현재), 메인 처리 큐 길이(현재), 큐별 길이 추이(메인/재시도 3단계/DLQ) |
 | 부하 분산 (접힘) | 특정 Pod로 쏠렸나 | Pod별 RPS, Pod별 P99 |
 | 노드 · 네트워크 (접힘) | 노드가 막았나 | 노드 CPU/메모리, Pod 네트워크 |
 
@@ -39,6 +41,12 @@ Grafana 사이드카가 잠시 뒤 자동으로 읽습니다. 대시보드는 �
 - 부하 테스트에 필요한 수집기만 켰습니다(`stat_database`, `stat_activity`, `stat_user_tables`, `long_running_transactions`, 기본 `locks`/`settings`/`database`). 나머지는 꺼서 스크레이프마다 DB에 던지는 쿼리와 시계열 수를 줄였습니다(메모리 약 4MiB).
 - **락 대기**는 `pg_stat_activity_count{wait_event_type="Lock"}`로 봅니다. 선착순 발급은 쿠폰 한 행을 `SELECT ... FOR UPDATE`로 잠그므로 `wait_event=tuple`/`transactionid`가 대기열입니다. 같은 행에 50개 세션이 몰리게 재현해서 49개 대기로 나오는 것을 확인했습니다.
 - 커넥션 사용률은 `pg_settings_max_connections`(이 저장소 `postgresql.conf`는 300)가 분모입니다.
+
+## RabbitMQ 지표
+
+- `rabbitmq:4-alpine` 이미지는 `rabbitmq_prometheus` 플러그인이 기본 활성화되어 있어 별도 설정 없이 15692에서 지표를 노출합니다.
+- 큐별(특히 `coupon.issued.dlq`) 길이는 기본 `/metrics`가 아니라 **`/metrics/detailed?family=queue_coarse_metrics`**에만 `rabbitmq_detailed_queue_messages{queue=...}` 라벨로 나옵니다. 기본 `/metrics`의 `rabbitmq_queue_messages`는 전체 합산값이라 어느 큐가 문제인지 구분이 안 됩니다 — 그래서 ServiceMonitor가 `path`를 detailed 엔드포인트로, `params.family`를 `queue_coarse_metrics`로 지정합니다.
+- `coupon.retry.2s`/`8s`/`32s`는 컨슈머 없는 대기실이라 쌓여 있는 게 정상입니다(TTL 만료를 기다리는 중). 실제로 봐야 할 신호는 `coupon.issued.dlq`가 0보다 커지는 순간과, `coupon.issued`(메인 처리 큐)가 계속 늘기만 하는 추세입니다.
 
 ## 히스토그램 버킷
 

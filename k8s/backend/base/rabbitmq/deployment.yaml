@@ -23,9 +23,13 @@ spec:
       containers:
         - name: rabbitmq
           image: rabbitmq:4-alpine
+          # rabbitmq:4-alpine은 rabbitmq_prometheus 플러그인이 기본 활성화되어 있어
+          # 별도 설정 없이 15692에서 지표를 노출한다.
           ports:
             - name: amqp
               containerPort: 5672
+            - name: metrics
+              containerPort: 15692
           env:
             - name: RABBITMQ_DEFAULT_USER
               valueFrom:
