@@ -914,6 +914,21 @@
           {
             "matcher": {
               "id": "byRegexp",
+              "options": "202.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
               "options": "400.*"
             },
             "properties": [
@@ -2511,7 +2526,7 @@
     {
       "type": "piechart",
       "title": "발급 결과 분포 (선택 기간 누적)",
-      "description": "400 은 재고 소진·기간 외 뿐 아니라 요청 본문 검증 실패(userId 형식 오류)도 포함한다. 201 합계가 재고를 넘으면 초과 발급이다",
+      "description": "400 은 재고 소진·기간 외 뿐 아니라 요청 본문 검증 실패(userId 형식 오류)도 포함한다. 202(접수)는 Valkey 판정 통과 건수이며 실제 DB 반영(coupon_issues)과는 별개다 — 202 합계가 재고를 넘어도 그 자체로는 초과 발급이 아니다",
       "id": 36,
       "datasource": {
         "type": "prometheus",
@@ -2535,7 +2550,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "201.*"
+              "options": "202.*"
             },
             "properties": [
               {
@@ -2640,9 +2655,9 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(http_requests_total{namespace=\"$namespace\", job=\"$app\", route=\"/coupons/:id/issue\", method=\"POST\", status_code=\"201\"}[$__range])) or vector(0)",
+          "expr": "sum(increase(http_requests_total{namespace=\"$namespace\", job=\"$app\", route=\"/coupons/:id/issue\", method=\"POST\", status_code=\"202\"}[$__range])) or vector(0)",
           "refId": "A",
-          "legendFormat": "201 성공",
+          "legendFormat": "202 접수",
           "instant": true,
           "range": false
         },
@@ -2684,7 +2699,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(http_requests_total{namespace=\"$namespace\", job=\"$app\", route=\"/coupons/:id/issue\", method=\"POST\", status_code!~\"201|400|409|5..\"}[$__range])) or vector(0)",
+          "expr": "sum(increase(http_requests_total{namespace=\"$namespace\", job=\"$app\", route=\"/coupons/:id/issue\", method=\"POST\", status_code!~\"202|400|409|5..\"}[$__range])) or vector(0)",
           "refId": "E",
           "legendFormat": "기타 (404 등)",
           "instant": true,
@@ -2695,7 +2710,7 @@
     {
       "type": "timeseries",
       "title": "발급 요청 — 상태코드별 RPS",
-      "description": "stacked. 재고가 소진되면 201 이 줄고 400 이 늘어나는 전환 시점을 볼 수 있다",
+      "description": "stacked. 재고가 소진되면 202 가 줄고 400 이 늘어나는 전환 시점을 볼 수 있다",
       "id": 37,
       "datasource": {
         "type": "prometheus",
@@ -2725,7 +2740,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "201.*"
+              "options": "202.*"
             },
             "properties": [
               {
