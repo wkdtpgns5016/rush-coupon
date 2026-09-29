@@ -1,4 +1,4 @@
-# k6 부하 테스트 가이드 — M5(#47)
+# k6 부하 테스트 가이드 — M5
 
 ## 요약
 
@@ -163,10 +163,16 @@ API 응답 지연(5-1)과 종단 지연(5-2)을 나란히 보면, "즉시 응답
 
 클러스터 대상 실행 시, `k8s/monitoring`의 **Rush Coupon API** 대시보드와 함께 다음을 관찰한다:
 
-- **API/Worker 파드 각각의 HPA 확장 여부** — `kubectl -n rush-coupon get hpa --watch`, 대시보드
-  파드 수 패널. M3에서 API 파드가 3개에서 멈췄던 것과 비교
-- **RabbitMQ 큐 길이 추이** (대시보드 큐 패널) — 순간 유입(spike)이 몰려도 Worker가 정상적으로
-  배출해 큐 길이가 다시 0으로 돌아오는지 확인
+- **API 파드의 HPA 확장 여부** — `kubectl -n rush-coupon get hpa --watch`, 대시보드 파드 수 패널.
+  M3에서 API 파드가 3개에서 멈췄던 것과 비교
+- **Worker 파드는 HPA가 없다 (`k8s/backend/base/worker/deployment.yaml`, `replicas: 2` 고정)** —
+  큐 길이 기반 오토스케일링은 KEDA + RabbitMQ management API가 필요해 배포 시점에 범위 밖으로
+  보류됐다. 그래서 부하를 얼마나 줘도 Worker 파드 수는 2에서 관찰상 변하지 않는다 — 이건
+  버그가 아니라 현재 배포 구성의 알려진 제약이니, "Worker가 확장 안 됨"이 아니라 "Worker
+  오토스케일링이 아직 없음"으로 M5 리포트에 그대로 기록한다. (KEDA 도입은 별도 백로그로 제안)
+- **RabbitMQ 큐 길이 추이** (대시보드 큐 패널) — 순간 유입(spike)이 몰려도 고정 2대 Worker가
+  정상적으로 배출해 큐 길이가 다시 0으로 돌아오는지, 아니면 계속 쌓이기만 하는지 확인 —
+  Worker가 고정 대수라 이 배출 속도 자체가 M5의 실질적인 처리량 상한을 보여준다
 - **DLQ 패널** — 재시도 끝에 DLQ로 격리되는 메시지가 있는지 (있다면 `docs/operations/dlq-recovery.md`
   참고)
 
