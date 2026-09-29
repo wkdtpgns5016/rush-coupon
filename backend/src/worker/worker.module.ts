@@ -5,6 +5,7 @@ import { RabbitmqModule } from '../rabbitmq/rabbitmq.module';
 import { Coupon } from '../coupons/entities/coupon.entity';
 import { CouponIssue } from '../coupons/entities/coupon-issue.entity';
 import { CouponIssueConsumerService } from './coupon-issue-consumer.service';
+import { CouponRetryRouter } from './coupon-retry-router.service';
 
 @Module({
   imports: [
@@ -29,6 +30,6 @@ import { CouponIssueConsumerService } from './coupon-issue-consumer.service';
     TypeOrmModule.forFeature([CouponIssue]),
     RabbitmqModule,
   ],
-  providers: [CouponIssueConsumerService],
+  providers: [CouponIssueConsumerService, CouponRetryRouter],
 })
 export class WorkerModule {}

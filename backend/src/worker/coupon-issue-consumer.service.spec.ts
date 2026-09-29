@@ -7,11 +7,14 @@ import {
   COUPON_ISSUED_QUEUE,
   COUPON_ISSUED_ROUTING_KEY,
 } from '../coupons/coupon-event-publisher.service';
+import { COUPON_ISSUED_DLQ, RETRY_STAGES } from '../coupons/coupon-messaging.constants';
 import { Coupon } from '../coupons/entities/coupon.entity';
 import { CouponIssue } from '../coupons/entities/coupon-issue.entity';
 import { RABBITMQ_CHANNEL } from '../rabbitmq/rabbitmq.constants';
 import { connectTestChannel, TestChannel } from '../test-utils/rabbitmq-test-channel';
+import { TEST_RETRY_TTL_MS } from '../test-utils/retry-ttl';
 import { CouponIssueConsumerService } from './coupon-issue-consumer.service';
+import { CouponRetryRouter } from './coupon-retry-router.service';
 
 jest.setTimeout(30000);
 
@@ -56,16 +59,27 @@ describe('CouponIssueConsumerService (batch persistence integration)', () => {
       ],
       providers: [
         CouponIssueConsumerService,
+        CouponRetryRouter,
         { provide: RABBITMQ_CHANNEL, useFactory: connectTestChannel },
         {
           provide: ConfigService,
           useValue: {
-            get: (key: string, def: unknown) =>
-              key === 'WORKER_BATCH_SIZE'
-                ? BATCH_SIZE
-                : key === 'WORKER_BATCH_FLUSH_INTERVAL_MS'
-                  ? FLUSH_INTERVAL_MS
-                  : def,
+            get: (key: string, def: unknown) => {
+              switch (key) {
+                case 'WORKER_BATCH_SIZE':
+                  return BATCH_SIZE;
+                case 'WORKER_BATCH_FLUSH_INTERVAL_MS':
+                  return FLUSH_INTERVAL_MS;
+                case 'RETRY_TTL_2S_MS':
+                  return TEST_RETRY_TTL_MS[0];
+                case 'RETRY_TTL_8S_MS':
+                  return TEST_RETRY_TTL_MS[1];
+                case 'RETRY_TTL_32S_MS':
+                  return TEST_RETRY_TTL_MS[2];
+                default:
+                  return def;
+              }
+            },
           },
         },
       ],
@@ -80,7 +94,13 @@ describe('CouponIssueConsumerService (batch persistence integration)', () => {
     await dataSource.query(
       'TRUNCATE TABLE coupon_issues, coupons RESTART IDENTITY CASCADE',
     );
+    // 재시도/DLQ 큐도 비워야 한다 — 안 그러면 앞선 테스트가 남긴 메시지 때문에
+    // "정확히 1건/0건" 같은 절대 개수 검증이 오염된다.
     await publisherChannel.purgeQueue(COUPON_ISSUED_QUEUE);
+    await publisherChannel.purgeQueue(COUPON_ISSUED_DLQ);
+    for (const stage of RETRY_STAGES) {
+      await publisherChannel.purgeQueue(stage.queue);
+    }
 
     const [row] = (await dataSource.query(
       `INSERT INTO coupons (title, total_quantity, start_at, end_at)
@@ -115,6 +135,11 @@ describe('CouponIssueConsumerService (batch persistence integration)', () => {
         .getRepository(CouponIssue)
         .count({ where: { couponId } })
     );
+  }
+
+  async function queueCount(queue: string): Promise<number> {
+    const { messageCount } = await publisherChannel.checkQueue(queue);
+    return messageCount;
   }
 
   it('배치 크기만큼 쌓이면 즉시 저장하고 ack한다', async () => {
@@ -153,15 +178,76 @@ describe('CouponIssueConsumerService (batch persistence integration)', () => {
     expect(await issueCount()).toBe(1);
   });
 
-  it('잘못된 포맷의 메시지는 폐기하고 이후 정상 메시지 처리를 막지 않는다', async () => {
+  it('잘못된 포맷의 메시지는 재시도 단계를 거치지 않고 바로 DLQ로 격리한다', async () => {
     publish('this is not valid json');
     publish({ couponId, userId: '1' }); // requestedAt 없어도 처리 대상(couponId/userId만 검증)
 
     await waitUntil(async () => (await issueCount()) === 1);
+    await waitUntil(async () => (await queueCount(COUPON_ISSUED_DLQ)) === 1);
 
-    const { messageCount } = await publisherChannel.checkQueue(
-      COUPON_ISSUED_QUEUE,
+    expect(await queueCount(COUPON_ISSUED_QUEUE)).toBe(0);
+    for (const stage of RETRY_STAGES) {
+      expect(await queueCount(stage.queue)).toBe(0);
+    }
+  });
+
+  it('계속 실패하면 2s→8s→32s 단계를 모두 거쳐 최종 DLQ로 격리된다', async () => {
+    // 존재하지 않는 couponId라 FK 제약으로 매번 배치 INSERT가 실패하도록 강제한다.
+    publish({
+      couponId: '999999999',
+      userId: '1',
+      requestedAt: new Date().toISOString(),
+    });
+
+    for (const stage of RETRY_STAGES) {
+      await waitUntil(async () => (await queueCount(stage.queue)) === 1, 2000);
+    }
+    await waitUntil(async () => (await queueCount(COUPON_ISSUED_DLQ)) === 1, 2000);
+
+    expect(await queueCount(COUPON_ISSUED_QUEUE)).toBe(0);
+    for (const stage of RETRY_STAGES) {
+      expect(await queueCount(stage.queue)).toBe(0);
+    }
+  });
+
+  it('재시도 중 원인이 해결되면(쿠폰 생성) 다음 재시도에서 정상 저장되고 DLQ로 가지 않는다', async () => {
+    const missingCouponId = '888888888';
+    publish({
+      couponId: missingCouponId,
+      userId: '1',
+      requestedAt: new Date().toISOString(),
+    });
+
+    // 1차 실패 -> 2s(테스트에서는 TEST_RETRY_TTL_MS[0]) 재시도 큐로 들어갈 때까지 대기
+    await waitUntil(
+      async () => (await queueCount(RETRY_STAGES[0].queue)) === 1,
+      2000,
     );
-    expect(messageCount).toBe(0);
+
+    // 원인 해결: 재시도 만료 전에 해당 id로 쿠폰을 만들어준다
+    await dataSource.query(
+      `INSERT INTO coupons (id, title, total_quantity, start_at, end_at)
+       VALUES ($1, 'recovered', 1000, now() - interval '1 hour', now() + interval '1 hour')`,
+      [missingCouponId],
+    );
+
+    await waitUntil(async () => {
+      const count = await dataSource
+        .getRepository(CouponIssue)
+        .count({ where: { couponId: missingCouponId } });
+      return count === 1;
+    });
+
+    expect(await queueCount(COUPON_ISSUED_DLQ)).toBe(0);
+    for (const stage of RETRY_STAGES) {
+      expect(await queueCount(stage.queue)).toBe(0);
+    }
+
+    await dataSource.query('DELETE FROM coupon_issues WHERE coupon_id = $1', [
+      missingCouponId,
+    ]);
+    await dataSource.query('DELETE FROM coupons WHERE id = $1', [
+      missingCouponId,
+    ]);
   });
 });
