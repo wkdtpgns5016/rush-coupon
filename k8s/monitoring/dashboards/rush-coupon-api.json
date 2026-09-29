@@ -2896,7 +2896,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "rabbitmq_detailed_queue_messages{namespace=\"$namespace\", job=\"$rabbitmq\", queue=\"coupon.issued.dlq\"} or vector(0)",
+          "expr": "sum(rabbitmq_detailed_queue_messages{namespace=\"$namespace\", job=\"$rabbitmq\", queue=\"coupon.issued.dlq\"}) or vector(0)",
           "instant": true,
           "range": false,
           "refId": "A"
@@ -2961,7 +2961,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "rabbitmq_detailed_queue_messages{namespace=\"$namespace\", job=\"$rabbitmq\", queue=\"coupon.issued\"} or vector(0)",
+          "expr": "sum(rabbitmq_detailed_queue_messages{namespace=\"$namespace\", job=\"$rabbitmq\", queue=\"coupon.issued\"}) or vector(0)",
           "instant": true,
           "range": false,
           "refId": "A"
