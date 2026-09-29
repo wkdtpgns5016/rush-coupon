@@ -7,6 +7,7 @@
 | 범위 | Issue #31 — `POST /coupons/:id/issue`(비관적 락 기반 발급 API) k6 부하 시나리오 작성 및 성능 측정 |
 | 목적 | "정상 상태" 성능(baseline)과 "선착순 몰림" 상황의 한계(spike)를 측정해 병목(#32) 분석의 입력값을 만든다 |
 | 관련 파일 | [k6/lib/](../../k6/lib/), [k6/scenarios/](../../k6/scenarios/), 측정 결과는 [m3-mvp-load-test-report.md](m3-mvp-load-test-report.md) |
+| 참고 | `k6/scenarios/*.js`, `k6/lib/report.js`는 이후 #47(M5)에서 새 아키텍처에 맞춰 같은 파일이 갱신됨 — 지금 응답 코드/카운터는 여기 적힌 것과 다를 수 있다. 최신 기준은 [m5-k6-load-test.md](m5-k6-load-test.md) 참고 |
 
 ---
 

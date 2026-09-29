@@ -1,5 +1,8 @@
-// 베이스라인 부하 테스트: 단일 파드/소규모 트래픽 상황에서 비관적 락 발급 API의
+// 베이스라인 부하 테스트: 단일 파드/소규모 트래픽 상황에서 발급 API의
 // "정상 상태" 성능(RPS, 지연시간, 에러율)을 측정한다. spike.js와 비교할 기준선.
+// M5(#47)부터 발급 API는 Valkey 판정 통과 시 즉시 202로 응답하고(동기 커밋 아님),
+// 이 스크립트가 재는 지연은 "API 응답 지연"만이다 — 실제 DB 반영까지의 종단 지연은
+// k6/scripts/latency-report.sql로 테스트 종료 후 별도 계산한다.
 import http from 'k6/http';
 import { check } from 'k6';
 import exec from 'k6/execution';
@@ -10,9 +13,11 @@ import { buildSummaryText } from '../lib/report.js';
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000';
 const COUPON_QUANTITY = Number(__ENV.COUPON_QUANTITY || 100000);
 
-const issued = new Counter('coupon_issued_total');
+const accepted = new Counter('coupon_accepted_total');
 const soldOut = new Counter('coupon_sold_out_total');
+const notFound = new Counter('coupon_not_found_total');
 const duplicate = new Counter('coupon_duplicate_total');
+const unavailable = new Counter('coupon_unavailable_total');
 const unexpected = new Counter('coupon_unexpected_total');
 const issueDuration = new Trend('coupon_issue_duration', true);
 
@@ -56,12 +61,15 @@ export function issue(data) {
 
   issueDuration.add(res.timings.duration);
   check(res, {
-    '예상된 응답 코드 (201/400/409)': (r) => [201, 400, 409].includes(r.status),
+    '예상된 응답 코드 (202/400/404/409/503)': (r) =>
+      [202, 400, 404, 409, 503].includes(r.status),
   });
 
-  if (res.status === 201) issued.add(1);
+  if (res.status === 202) accepted.add(1);
   else if (res.status === 400) soldOut.add(1);
+  else if (res.status === 404) notFound.add(1);
   else if (res.status === 409) duplicate.add(1);
+  else if (res.status === 503) unavailable.add(1);
   else unexpected.add(1);
 }
 

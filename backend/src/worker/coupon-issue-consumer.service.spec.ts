@@ -180,10 +180,11 @@ describe('CouponIssueConsumerService (batch persistence integration)', () => {
 
   it('잘못된 포맷의 메시지는 재시도 단계를 거치지 않고 바로 DLQ로 격리한다', async () => {
     publish('this is not valid json');
-    publish({ couponId, userId: '1' }); // requestedAt 없어도 처리 대상(couponId/userId만 검증)
+    publish({ couponId, userId: '2' }); // requestedAt 없는 메시지도 포맷 오류로 취급해 DLQ로 격리
+    publish({ couponId, userId: '1', requestedAt: new Date().toISOString() });
 
     await waitUntil(async () => (await issueCount()) === 1);
-    await waitUntil(async () => (await queueCount(COUPON_ISSUED_DLQ)) === 1);
+    await waitUntil(async () => (await queueCount(COUPON_ISSUED_DLQ)) === 2);
 
     expect(await queueCount(COUPON_ISSUED_QUEUE)).toBe(0);
     for (const stage of RETRY_STAGES) {
