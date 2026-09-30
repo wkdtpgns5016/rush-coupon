@@ -93,9 +93,16 @@ backend-build:
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     # ECR_REPOSITORY_URL 형식: <account>.dkr.ecr.<region>.amazonaws.com/<repo>
-    # 자격증명은 이 EC2의 IAM 인스턴스 프로파일에서 자동으로 가져온다(정적 액세스키 없음).
-    - apk add --no-cache aws-cli
-    - aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin "${ECR_REPOSITORY_URL%%/*}"
+    # Alpine의 aws-cli 패키지는 musl과 안 맞아 pyexpat relocation 에러로 깨짐
+    # (aws ecr get-login-password 자체가 실행이 안 됨) — 대신 정적 바이너리인
+    # amazon-ecr-credential-helper를 써서 같은 문제를 피한다. 인증은 이 EC2의
+    # IAM 인스턴스 프로파일에서 자동으로 가져온다(정적 액세스키 없음).
+    - apk add --no-cache curl jq
+    - curl -fsSL -o /usr/local/bin/docker-credential-ecr-login
+      https://amazon-ecr-credential-helper-releases.s3.us-east-2.amazonaws.com/0.12.0/linux-amd64/docker-credential-ecr-login
+    - chmod +x /usr/local/bin/docker-credential-ecr-login
+    - jq --arg host "${ECR_REPOSITORY_URL%%/*}" '.credHelpers[$host] = "ecr-login"'
+      "$HOME/.docker/config.json" > /tmp/docker-config.json && mv /tmp/docker-config.json "$HOME/.docker/config.json"
     - >
       docker buildx build --platform linux/amd64
       -t "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHORT_SHA"
