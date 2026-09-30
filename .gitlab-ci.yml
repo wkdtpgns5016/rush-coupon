@@ -92,7 +92,15 @@ backend-build:
         - .gitlab-ci.yml
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-    - docker buildx build --platform linux/amd64 -t "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHORT_SHA" --push backend/
+    # ECR_REPOSITORY_URL 형식: <account>.dkr.ecr.<region>.amazonaws.com/<repo>
+    # 자격증명은 이 EC2의 IAM 인스턴스 프로파일에서 자동으로 가져온다(정적 액세스키 없음).
+    - apk add --no-cache aws-cli
+    - aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin "${ECR_REPOSITORY_URL%%/*}"
+    - >
+      docker buildx build --platform linux/amd64
+      -t "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHORT_SHA"
+      -t "$ECR_REPOSITORY_URL:$CI_COMMIT_SHORT_SHA"
+      --push backend/
 
 backend-deploy:
   stage: deploy

@@ -24,3 +24,12 @@ frontend/dist/
 # .gitkeep으로 디렉토리 자체는 유지 — handleSummary()가 파일을 쓸 때 디렉토리가 없으면 실패한다.
 k6/results/*
 !k6/results/.gitkeep
+
+# Terraform (.terraform.lock.hcl은 provider 버전 고정용이라 커밋 대상)
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
