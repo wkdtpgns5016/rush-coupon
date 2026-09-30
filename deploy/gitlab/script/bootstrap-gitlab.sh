@@ -128,10 +128,14 @@ docker exec "$RUNNER_CONTAINER" gitlab-runner register \
 echo "== 6. deploy/gitlab/.env 갱신 =="
 set_env "TOKEN" "$TOKEN"
 set_env "PROJECT_ID" "$PROJECT_ID"
+# gh CLI가 있는 호출자(예: terraform/gitlab-runner/bootstrap-and-verify.sh)가
+# GitHub Secrets(GITLAB_DEPLOY_TOKEN/GITLAB_DEPLOY_USER)를 자동 등록할 수 있도록 남겨둔다.
+set_env "MIRROR_TOKEN" "$MIRROR_TOKEN"
+set_env "MIRROR_BOT" "$MIRROR_BOT"
 
 echo ""
 echo "======================================================"
-echo "GitHub Secrets에 아래 값을 직접 등록하세요 (gh CLI 없어서 자동화 불가):"
+echo "GitHub Secrets에 아래 값을 등록하세요 (gh CLI가 있다면 자동화 가능 — deploy/gitlab/.env 참고):"
 echo "  GITLAB_DEPLOY_TOKEN = ${MIRROR_TOKEN}"
 echo "  GITLAB_DEPLOY_USER  = ${MIRROR_BOT}"
 echo "======================================================"

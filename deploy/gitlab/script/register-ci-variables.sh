@@ -44,6 +44,7 @@ set_var() {
     "$API" > /dev/null
 }
 
+set_var "ECR_REPOSITORY_URL" "${ECR_REPOSITORY_URL:-}"
 set_var "GITHUB_PAT" "${GITHUB_PAT:-}" true
 set_var "EXTERNAL_DB_HOST" "${EXTERNAL_DB_HOST:-}"
 set_var "EXTERNAL_DB_PORT" "${EXTERNAL_DB_PORT:-}"
