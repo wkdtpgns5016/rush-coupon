@@ -24,8 +24,10 @@ KUBE_CONTEXT="rush-coupon-cloud"
 NAMESPACE="monitoring"
 RELEASE="kube-prometheus-stack"
 CHART_VERSION="89.2.0"
+REGION="ap-northeast-2"
 
 command -v helm >/dev/null || { echo "에러: helm이 필요합니다"; exit 1; }
+command -v aws >/dev/null || { echo "에러: aws CLI가 필요합니다"; exit 1; }
 kubectl --context "$KUBE_CONTEXT" cluster-info >/dev/null 2>&1 || {
   echo "에러: kubectl로 ${KUBE_CONTEXT} 컨텍스트에 접근할 수 없습니다"
   exit 1
@@ -108,6 +110,20 @@ for i in $(seq 1 30); do
   sleep 10
 done
 echo ""
+
+# install-argocd.sh와 같은 이유 — DNS 이름이 나와도 AWS 쪽 ALB가 아직 provisioning
+# 상태일 수 있어 바로 접속하면 실패한다. active가 될 때까지 기다린다.
+if [ -n "$GRAFANA_HOST" ]; then
+  echo ">>> ALB가 실제로 active 상태가 될 때까지 대기 중..."
+  for i in $(seq 1 30); do
+    ALB_STATE="$(aws elbv2 describe-load-balancers --region "$REGION" \
+      --query "LoadBalancers[?DNSName=='${GRAFANA_HOST}'].State.Code" --output text 2>/dev/null || true)"
+    [ "$ALB_STATE" = "active" ] && break
+    printf '.'
+    sleep 10
+  done
+  echo ""
+fi
 
 GRAFANA_PW="$(kubectl --context "$KUBE_CONTEXT" -n "$NAMESPACE" get secret "${RELEASE}-grafana" \
   -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d 2>/dev/null || true)"

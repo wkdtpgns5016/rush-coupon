@@ -5,6 +5,10 @@
 resource "aws_ecr_repository" "backend" {
   name                 = var.ecr_repository_name
   image_tag_mutability = "MUTABLE"
+  # force_delete 없으면 이미지가 하나라도 남아있을 때 teardown.sh의 terraform destroy가
+  # RepositoryNotEmptyException으로 실패한다 — CI가 계속 이미지를 push하는 리포지토리라
+  # destroy 전에 수동으로 비울 일이 없게 해둔다.
+  force_delete = true
 
   image_scanning_configuration {
     scan_on_push = true

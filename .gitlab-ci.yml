@@ -199,3 +199,39 @@ frontend-deploy:
     - RELEASE_DIR="dist-$CI_COMMIT_SHORT_SHA-$CI_JOB_ID"
     - scp -P "$FRONTEND_SSH_PORT" -r frontend/dist "deploy@$FRONTEND_HOST:/releases/$RELEASE_DIR"
     - ssh -p "$FRONTEND_SSH_PORT" "deploy@$FRONTEND_HOST" "ln -sfn $RELEASE_DIR /releases/current"
+
+# frontend-build와 별도 job인 이유: Vite는 VITE_API_BASE_URL을 빌드 시점에 번들에
+# 박아 넣는데, 온프레미스(nginx Ingress)와 클라우드(ALB)는 backend 주소가 서로 달라서
+# 하나의 dist/ 산출물을 공유할 수 없다. backend는 런타임에 env로 주소를 받아 이미지
+# 하나를 공유할 수 있는 것과 다른 지점.
+frontend-build-cloud:
+  extends: .frontend_node_job
+  stage: build
+  variables:
+    VITE_API_BASE_URL: $VITE_API_BASE_URL_CLOUD
+  script:
+    - npm run build
+  artifacts:
+    paths:
+      - frontend/dist/
+    expire_in: 1 hour
+
+frontend-deploy-cloud:
+  stage: deploy
+  # Alpine의 aws-cli 패키지는 musl과 안 맞아 pyexpat relocation 에러로 깨진다
+  # (backend-build의 ECR 로그인 때 겪은 것과 같은 문제) — 공식 glibc 기반 이미지로 회피.
+  image:
+    name: amazon/aws-cli:2.17.62
+    entrypoint: [""]
+  when: manual
+  needs:
+    - frontend-build-cloud
+  rules:
+    - changes:
+        - frontend/**/*
+        - .gitlab-ci.yml
+  script:
+    # 인증은 이 Runner EC2의 IAM 인스턴스 프로파일에서 자동으로 가져온다(terraform/gitlab-runner
+    # iam.tf의 frontend_deploy 정책) — backend-build의 ECR 로그인과 같은 방식, 정적 키 없음.
+    - aws s3 sync frontend/dist "s3://$FRONTEND_BUCKET" --delete
+    - aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/*"

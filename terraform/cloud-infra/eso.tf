@@ -6,12 +6,13 @@ locals {
   ssm_prefix = "/${var.name_prefix}"
 }
 
-# #59(S3+CloudFront)가 끝나야 실제 값을 안다. 그때 var.cors_origin만 갱신하고
-# terraform apply하면 ESO가 자동으로 재동기화한다(기본 refreshInterval 1h).
+# #59(S3+CloudFront)의 CloudFront 배포 도메인을 변수가 아니라 리소스 참조로 직접
+# 가져온다 — var.cors_origin 플레이스홀더를 수동으로 갱신하고 다시 apply할 필요 없이,
+# 같은 apply 한 번으로 frontend.tf의 실제 배포 도메인이 그대로 들어간다.
 resource "aws_ssm_parameter" "cors_origin" {
   name  = "${local.ssm_prefix}/CORS_ORIGIN"
   type  = "SecureString"
-  value = var.cors_origin
+  value = "https://${aws_cloudfront_distribution.frontend.domain_name}"
 }
 
 resource "aws_ssm_parameter" "valkey_host" {

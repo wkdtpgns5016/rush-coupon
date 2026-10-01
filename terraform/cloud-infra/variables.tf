@@ -138,12 +138,6 @@ variable "mq_username" {
 # ECR
 # ---------------------------------------------------------------------------
 
-variable "cors_origin" {
-  description = "#59(S3+CloudFront) 완료 후 실제 도메인으로 갱신. 그 전까지는 플레이스홀더"
-  type        = string
-  default     = "https://TBD.cloudfront.net"
-}
-
 variable "ecr_repository_name" {
   description = "backend 이미지를 push할 ECR 리포지토리 이름 (원래 #54에 있었는데 EKS가 있는 이 스택으로 이동 — gitlab-runner는 스핀업/destroy를 반복해서 ECR을 같이 두면 안 됨)"
   type        = string
