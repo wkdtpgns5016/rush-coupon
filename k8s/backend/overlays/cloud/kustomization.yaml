@@ -20,6 +20,19 @@ resources:
   - external-secrets.yaml
   - ingress.yaml
 
+# postgres-exporter의 DATA_SOURCE_URI는 base에서 sslmode=disable로 고정돼있다(온프레미스
+# 기본값, 건드리면 위험한 이유는 postgres-exporter/deployment.yaml 주석 참고) — RDS는 SSL을
+# 강제해서 여기서만 require로 덮어쓴다. env 배열의 인덱스 3번이 DATA_SOURCE_URI다
+# (DB_HOST=0, DB_PORT=1, DB_DATABASE=2, DATA_SOURCE_URI=3 — base 파일의 env 순서 그대로).
+patches:
+  - target:
+      kind: Deployment
+      name: postgres-exporter
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env/3/value
+        value: "$(DB_HOST):$(DB_PORT)/$(DB_DATABASE)?sslmode=require"
+
 configMapGenerator:
   - name: backend-image
     envs:

@@ -47,6 +47,14 @@ spec:
                 secretKeyRef:
                   name: backend-db-credentials
                   key: DB_PASSWORD
+            # app.module.ts/base/deployment.yaml과 동일한 이유(RDS rds.force_ssl=1) — optional이라
+            # 온프레미스(이 키 없음)는 안 깨지고 worker.module.ts 기본값(false)이 적용된다.
+            - name: DB_SSL
+              valueFrom:
+                secretKeyRef:
+                  name: backend-db-credentials
+                  key: DB_SSL
+                  optional: true
             - name: RABBITMQ_HOST
               valueFrom:
                 secretKeyRef:

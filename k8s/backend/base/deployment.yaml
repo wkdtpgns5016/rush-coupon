@@ -54,6 +54,14 @@ spec:
                 secretKeyRef:
                   name: backend-db-credentials
                   key: DB_PASSWORD
+            # RDS는 평문 연결을 거부한다(rds.force_ssl=1) — 온프레미스는 이 키 자체가 없어도
+            # optional이라 안 깨지고, app.module.ts 기본값(false)이 그대로 적용된다.
+            - name: DB_SSL
+              valueFrom:
+                secretKeyRef:
+                  name: backend-db-credentials
+                  key: DB_SSL
+                  optional: true
             # valkey/rabbitmq 호스트는 자격증명이 아니라 평문 설정값이지만, local(클러스터 내부
             # Service 이름 "valkey"/"rabbitmq")과 cloud(ElastiCache/Amazon MQ 엔드포인트)가
             # 서로 다른 값을 써야 해서 CORS_ORIGIN과 같은 방식으로 주입한다. ConfigMap이 아니라

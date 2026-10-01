@@ -16,3 +16,8 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    # ServiceMonitor CRD(Prometheus Operator)가 아직 이 클러스터에 없다 — 모니터링 스택은
+    # #60에서 설치 예정. 이 옵션 없이는 CRD 하나가 없다는 이유로 전체 동기화가 실패/재시도를
+    # 반복한다(실제로 겪음). #60에서 CRD가 생기면 selfHeal이 자동으로 따라잡는다.
+    syncOptions:
+      - SkipDryRunOnMissingResource=true

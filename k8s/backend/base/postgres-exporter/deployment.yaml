@@ -52,7 +52,11 @@ spec:
                   name: backend-db-credentials
                   key: DB_DATABASE
             - name: DATA_SOURCE_URI
-              # 위에서 정의한 env 를 $(VAR) 로 참조한다 (정의 순서가 앞선 것만 치환됨). backend 와 같이 SSL 없이 접속.
+              # 위에서 정의한 env 를 $(VAR) 로 참조한다 (정의 순서가 앞선 것만 치환됨). 기본값은
+              # 온프레미스 기준 SSL 없이 접속 — RDS는 rds.force_ssl=1이 기본값이라 평문을
+              # 거부하는데, overlays/cloud가 이 한 줄만 patch로 require로 덮어쓴다(secretKeyRef로
+              # 새 키를 추가하면 온프레미스 수동 Secret에 그 키가 없어서 $(VAR)가 치환 안 되고
+              # 문자열 그대로 박혀 연결이 깨지는 위험이 있어 patch 방식을 택함).
               value: "$(DB_HOST):$(DB_PORT)/$(DB_DATABASE)?sslmode=disable"
             - name: DATA_SOURCE_USER
               valueFrom:
