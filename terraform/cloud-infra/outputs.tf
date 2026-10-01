@@ -63,6 +63,11 @@ output "ecr_repository_url" {
   value = aws_ecr_repository.backend.repository_url
 }
 
+output "eso_role_arn" {
+  description = "install-eso.sh가 ServiceAccount annotation으로 쓸 IRSA 역할 ARN"
+  value       = aws_iam_role.eso.arn
+}
+
 output "alb_controller_role_arn" {
   description = "install-alb-controller.sh가 ServiceAccount annotation으로 쓸 IRSA 역할 ARN"
   value       = aws_iam_role.alb_controller.arn
