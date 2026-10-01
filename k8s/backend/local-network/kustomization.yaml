@@ -6,17 +6,29 @@ namespace: rush-coupon
 resources:
   - ingress.yaml
 
+# INGRESS_HOST는 ConfigMap으로 남긴다 — kustomize replacements는 Secret의 data(base64)를
+# 그대로 복사해버려서(디코드 안 함) Ingress host 필드에 꽂으면 깨진다 (실제로 확인함).
+# CORS_ORIGIN/VALKEY/RABBITMQ는 파드가 secretKeyRef로 읽는 값이라 Secret으로 분리한다
+# (base/deployment.yaml이 Secret을 참조하도록 바뀐 이유는 cloud 쪽 ESO가 Secret만
+# 만들 수 있어서 — local도 같은 참조 방식으로 맞춘 것).
 configMapGenerator:
+  - name: backend-ingress-host
+    envs:
+      - ingress-host.env
+    options:
+      disableNameSuffixHash: true
+
+secretGenerator:
   - name: backend-network
     envs:
-      - network-connection.env
+      - backend-secrets.env
     options:
       disableNameSuffixHash: true
 
 replacements:
   - source:
       kind: ConfigMap
-      name: backend-network
+      name: backend-ingress-host
       fieldPath: data.INGRESS_HOST
     targets:
       - select:

@@ -26,7 +26,7 @@ spec:
               value: "3000"
             - name: CORS_ORIGIN
               valueFrom:
-                configMapKeyRef:
+                secretKeyRef:
                   name: backend-network
                   key: CORS_ORIGIN
             - name: DB_HOST
@@ -56,25 +56,27 @@ spec:
                   key: DB_PASSWORD
             # valkey/rabbitmq 호스트는 자격증명이 아니라 평문 설정값이지만, local(클러스터 내부
             # Service 이름 "valkey"/"rabbitmq")과 cloud(ElastiCache/Amazon MQ 엔드포인트)가
-            # 서로 다른 값을 써야 해서 CORS_ORIGIN과 같은 방식으로 ConfigMap을 통해 주입한다.
+            # 서로 다른 값을 써야 해서 CORS_ORIGIN과 같은 방식으로 주입한다. ConfigMap이 아니라
+            # Secret인 이유는 #57에서 cloud 쪽을 External Secrets Operator가 채우게 되면서인데,
+            # ESO는 Secret만 만들 수 있어서 local도 같은 참조 방식(secretKeyRef)으로 통일했다.
             - name: VALKEY_HOST
               valueFrom:
-                configMapKeyRef:
+                secretKeyRef:
                   name: backend-network
                   key: VALKEY_HOST
             - name: VALKEY_PORT
               valueFrom:
-                configMapKeyRef:
+                secretKeyRef:
                   name: backend-network
                   key: VALKEY_PORT
             - name: RABBITMQ_HOST
               valueFrom:
-                configMapKeyRef:
+                secretKeyRef:
                   name: backend-network
                   key: RABBITMQ_HOST
             - name: RABBITMQ_PORT
               valueFrom:
-                configMapKeyRef:
+                secretKeyRef:
                   name: backend-network
                   key: RABBITMQ_PORT
             - name: RABBITMQ_USERNAME

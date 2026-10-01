@@ -4,13 +4,29 @@ kind: Kustomization
 # overlays/local과 달리 valkey/rabbitmq는 포함하지 않는다 — ElastiCache/Amazon MQ로
 # 완전히 대체 (base에도 애초에 없음, local만 명시적으로 추가하는 구조).
 # imagePullSecrets 패치도 없다 — EKS 노드 IAM 역할로 ECR을 인증 없이 pull하므로 불필요.
+#
+# secretstore.yaml/external-secrets.yaml/ingress.yaml은 base를 거치지 않는 sibling
+# 리소스라 base의 namespace: rush-coupon이 안 먹는다 (overlays/local에서 valkey/rabbitmq
+# 때 겪은 것과 같은 함정) — 그래서 여기서 namespace를 명시한다.
+namespace: rush-coupon
+
 resources:
   - ../../base
+  - secretstore.yaml
+  - external-secrets.yaml
+  - ingress.yaml
 
 configMapGenerator:
   - name: backend-image
     envs:
       - image.env
+    options:
+      disableNameSuffixHash: true
+  # db-secret.env는 gitignored (db-secret.env.example만 커밋) — RDS Secrets Manager ARN은
+  # 계정ID를 포함해서 실제 값을 git에 올리면 안 된다.
+  - name: db-secret
+    envs:
+      - db-secret.env
     options:
       disableNameSuffixHash: true
 
@@ -30,3 +46,14 @@ replacements:
           name: worker
         fieldPaths:
           - spec.template.spec.containers.0.image
+  - source:
+      kind: ConfigMap
+      name: db-secret
+      fieldPath: data.RDS_SECRET_ARN
+    targets:
+      - select:
+          kind: ExternalSecret
+          name: backend-db-credentials-auth
+        fieldPaths:
+          - spec.data.0.remoteRef.key
+          - spec.data.1.remoteRef.key

@@ -14,3 +14,4 @@
 # k8s/backend/local-network, k8s/database처럼 ArgoCD가 안 보는(직접 kubectl apply -k하는)
 # 경로는 클러스터마다 값이 달라져도 selfHeal로 되돌아갈 일이 없어서 평범하게 gitignore.
 !k8s/backend/overlays/local/image.env
+!k8s/backend/overlays/cloud/image.env

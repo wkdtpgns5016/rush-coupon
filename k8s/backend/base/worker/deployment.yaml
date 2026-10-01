@@ -49,12 +49,12 @@ spec:
                   key: DB_PASSWORD
             - name: RABBITMQ_HOST
               valueFrom:
-                configMapKeyRef:
+                secretKeyRef:
                   name: backend-network
                   key: RABBITMQ_HOST
             - name: RABBITMQ_PORT
               valueFrom:
-                configMapKeyRef:
+                secretKeyRef:
                   name: backend-network
                   key: RABBITMQ_PORT
             - name: RABBITMQ_USERNAME
