@@ -82,9 +82,10 @@ async function main(): Promise<void> {
   const port = process.env.RABBITMQ_PORT ?? '5672';
   const username = process.env.RABBITMQ_USERNAME ?? 'guest';
   const password = process.env.RABBITMQ_PASSWORD ?? 'guest';
+  const protocol = process.env.RABBITMQ_PROTOCOL ?? 'amqp';
 
   const connection = await amqplib.connect(
-    `amqp://${username}:${password}@${host}:${port}/`,
+    `${protocol}://${username}:${password}@${host}:${port}/`,
   );
   const channel = await connection.createConfirmChannel();
 
