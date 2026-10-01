@@ -16,9 +16,12 @@ import { RABBITMQ_CHANNEL, RABBITMQ_CONNECTION } from './rabbitmq.constants';
         const username = configService.get<string>('RABBITMQ_USERNAME', 'guest');
         const password = configService.get<string>('RABBITMQ_PASSWORD', 'guest');
         const vhost = configService.get<string>('RABBITMQ_VHOST', '/');
+        // Amazon MQ는 평문 AMQP(5672)를 지원하지 않고 AMQPS(TLS, 5671)만 지원한다.
+        // 온프레미스 자체 호스팅 RabbitMQ는 계속 평문이라 기본값은 amqp로 둔다.
+        const protocol = configService.get<string>('RABBITMQ_PROTOCOL', 'amqp');
 
         return amqplib.connect(
-          `amqp://${username}:${password}@${host}:${port}/${encodeURIComponent(vhost)}`,
+          `${protocol}://${username}:${password}@${host}:${port}/${encodeURIComponent(vhost)}`,
         );
       },
     },

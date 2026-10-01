@@ -40,6 +40,14 @@ resource "aws_ssm_parameter" "rabbitmq_port" {
   value = "5671"
 }
 
+# Amazon MQ는 AMQPS(TLS)만 지원해서, 평문 amqp가 기본값인 백엔드 코드에 이 값으로
+# 오버라이드해줘야 한다 (rabbitmq.module.ts의 RABBITMQ_PROTOCOL).
+resource "aws_ssm_parameter" "rabbitmq_protocol" {
+  name  = "${local.ssm_prefix}/RABBITMQ_PROTOCOL"
+  type  = "SecureString"
+  value = "amqps"
+}
+
 resource "aws_ssm_parameter" "rabbitmq_username" {
   name  = "${local.ssm_prefix}/RABBITMQ_USERNAME"
   type  = "SecureString"
