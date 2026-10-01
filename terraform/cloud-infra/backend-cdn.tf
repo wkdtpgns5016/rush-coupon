@@ -27,7 +27,12 @@ data "kubernetes_ingress_v1" "backend" {
 }
 
 locals {
-  backend_alb_hostname = var.enable_backend_cdn ? data.kubernetes_ingress_v1.backend[0].status[0].load_balancer[0].ingress[0].hostname : ""
+  # try()로 감싼다 — teardown.sh는 ALB 정리를 위해 destroy 전에 Ingress를 먼저 지우는데,
+  # 그러면 destroy가 이 데이터 소스를 다시 읽으려다 status가 null이라 에러난다(실제로 겪음).
+  # destroy는 이미 state에 저장된 값으로 리소스를 지우는 거라 이 로컬값이 실제로 AWS에
+  # 전달되진 않지만, 빈 문자열은 CloudFront 스키마 검증("must not be empty")에 또
+  # 걸려서(실제로 겪음) 아무 의미 없는 더미 도메인으로 떨어뜨린다.
+  backend_alb_hostname = var.enable_backend_cdn ? try(data.kubernetes_ingress_v1.backend[0].status[0].load_balancer[0].ingress[0].hostname, "destroying.invalid") : ""
 }
 
 data "aws_cloudfront_cache_policy" "caching_disabled" {
