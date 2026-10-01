@@ -1,3 +1,7 @@
+# 원래 #54(terraform/gitlab-runner)에 있었는데, 그 스택이 자주 스핀업/destroy되는
+# 일회성 CI 검증용이라 ECR까지 같이 사라지는 문제가 있어서 여기(EKS가 있는 영구적인
+# 스택)로 옮겼다. gitlab-runner의 EC2 IAM 역할(AmazonEC2ContainerRegistryPowerUser)은
+# 계정 전체 권한이라 이 리소스가 어느 스택에 있든 push에는 영향이 없다.
 resource "aws_ecr_repository" "backend" {
   name                 = var.ecr_repository_name
   image_tag_mutability = "MUTABLE"

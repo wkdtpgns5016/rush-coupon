@@ -1,0 +1,9 @@
+# 이 스택은 #54(gitlab-runner)와 달리 필수 입력 변수가 없다 —
+# RDS 비밀번호는 manage_master_user_password로 RDS가, Amazon MQ 비밀번호는
+# random_password로 Terraform이 자동 생성한다. 기본값만으로 바로 apply 가능하다.
+#
+# 값을 바꾸고 싶을 때만 아래처럼 cp해서 수정한다:
+#   cp terraform.tfvars.example terraform.tfvars
+
+# eks_node_instance_type = "c5.xlarge"
+# rds_instance_class     = "db.t4g.micro"
