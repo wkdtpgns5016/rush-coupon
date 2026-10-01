@@ -46,7 +46,8 @@ output "mq_console_url" {
 }
 
 output "mq_amqp_endpoint" {
-  value = aws_mq_broker.this.instances[0].endpoints[0]
+  description = "AMQPS(5671) 엔드포인트 — endpoints 배열 순서가 안 보장돼서 scheme으로 직접 골라낸다 (console_url이 [0]으로 나온 적 있음)"
+  value       = [for e in aws_mq_broker.this.instances[0].endpoints : e if startswith(e, "amqps://")][0]
 }
 
 output "mq_username" {
@@ -60,4 +61,9 @@ output "mq_password" {
 
 output "ecr_repository_url" {
   value = aws_ecr_repository.backend.repository_url
+}
+
+output "alb_controller_role_arn" {
+  description = "install-alb-controller.sh가 ServiceAccount annotation으로 쓸 IRSA 역할 ARN"
+  value       = aws_iam_role.alb_controller.arn
 }
