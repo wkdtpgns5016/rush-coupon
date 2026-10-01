@@ -1,0 +1,64 @@
+# RDS는 private subnet(publicly_accessible=false)이라 CI Runner EC2(다른 VPC)나
+# 로컬 terraform apply 환경에서 직접 psql로 붙을 수 없다 — 그래서 스키마 적용을
+# 클러스터 내부(EKS 노드, RDS와 같은 VPC)에서 도는 ArgoCD PreSync hook Job으로 한다.
+# PreSync라 매 sync(배포)마다 앱 리소스를 반영하기 전에 먼저 실행되고,
+# HookSucceeded 정책이라 성공하면 자동 정리되어 다음 sync 때 새로 생성된다.
+# schema.sql(ConfigMap generator로 생성)이 CREATE TABLE IF NOT EXISTS / ADD COLUMN
+# IF NOT EXISTS로 멱등하게 작성돼 있어서 매번 재실행해도 안전하다.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: schema-apply
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: schema-apply
+          image: postgres:16-alpine
+          # k8s의 $(VAR) 필드 치환이 아니라 평범한 셸 변수($VAR)로 참조한다 — RDS 비밀번호는
+          # AWS가 자동 생성해서 괄호 등 특수문자가 섞일 수 있는데, $(VAR)로 먼저 치환해버리면
+          # 그 값이 셸 구문으로 다시 해석되면서 깨진다(실제로 "unexpected )" 에러로 겪음).
+          command:
+            - sh
+            - -c
+            - PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME" -d "$DB_DATABASE" -f /sql/schema.sql
+          env:
+            - name: PGSSLMODE
+              value: "require"
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: backend-db-credentials
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: backend-db-credentials
+                  key: DB_PORT
+            - name: DB_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: backend-db-credentials
+                  key: DB_DATABASE
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: backend-db-credentials
+                  key: DB_USERNAME
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backend-db-credentials
+                  key: DB_PASSWORD
+          volumeMounts:
+            - name: sql
+              mountPath: /sql
+      volumes:
+        - name: sql
+          configMap:
+            name: schema-sql

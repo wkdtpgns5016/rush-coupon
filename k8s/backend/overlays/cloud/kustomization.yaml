@@ -19,6 +19,7 @@ resources:
   - secretstore.yaml
   - external-secrets.yaml
   - ingress.yaml
+  - schema-apply-job.yaml
 
 # postgres-exporter의 DATA_SOURCE_URI는 base에서 sslmode=disable로 고정돼있다(온프레미스
 # 기본값, 건드리면 위험한 이유는 postgres-exporter/deployment.yaml 주석 참고) — RDS는 SSL을
@@ -39,6 +40,12 @@ configMapGenerator:
       - image.env
     options:
       disableNameSuffixHash: true
+  # backend-image와 달리 해시 접미사를 그대로 둔다 — schema.sql 내용이 바뀌면 ConfigMap
+  # 이름도 바뀌어서(schema-apply-job.yaml의 volumes.configMap.name 참조는 kustomize가
+  # 자동으로 새 이름에 맞게 고쳐준다) 매 sync마다 정확히 그 시점의 스키마가 적용된다.
+  - name: schema-sql
+    files:
+      - schema.sql
 
 replacements:
   - source:
