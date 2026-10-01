@@ -39,12 +39,24 @@ set_var() {
     echo "skip: $key (값 없음)"
     return
   fi
-  echo "set: $key"
-  curl -s --header "PRIVATE-TOKEN: ${TOKEN}" \
-    --data-urlencode "key=${key}" \
-    --data-urlencode "value=${value}" \
-    --data "masked=${masked}&protected=${protected}" \
-    "$API" > /dev/null
+  # 있으면 PUT(갱신), 없으면 POST(생성) — POST만 쓰면 이미 존재하는 키에 400을
+  # 받고도 조용히 무시돼서(응답을 버림), ALB/버킷 등 값이 바뀌어도 GitLab에는
+  # 예전 값이 그대로 남는 걸 실제로 겪었다.
+  if curl -s -o /dev/null -w '%{http_code}' --header "PRIVATE-TOKEN: ${TOKEN}" \
+      "${API}/${key}" | grep -q '^200$'; then
+    echo "update: $key"
+    curl -s --request PUT --header "PRIVATE-TOKEN: ${TOKEN}" \
+      --data-urlencode "value=${value}" \
+      --data "masked=${masked}&protected=${protected}" \
+      "${API}/${key}" > /dev/null
+  else
+    echo "create: $key"
+    curl -s --header "PRIVATE-TOKEN: ${TOKEN}" \
+      --data-urlencode "key=${key}" \
+      --data-urlencode "value=${value}" \
+      --data "masked=${masked}&protected=${protected}" \
+      "$API" > /dev/null
+  fi
 }
 
 set_var "ECR_REPOSITORY_URL" "${ECR_REPOSITORY_URL:-}"

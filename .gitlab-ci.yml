@@ -207,9 +207,12 @@ frontend-deploy:
 frontend-build-cloud:
   extends: .frontend_node_job
   stage: build
-  variables:
-    VITE_API_BASE_URL: $VITE_API_BASE_URL_CLOUD
   script:
+    # GitLab의 변수 우선순위상 프로젝트 CI/CD 변수(VITE_API_BASE_URL, 온프레미스용)가
+    # 같은 이름의 job-level variables: 선언보다 항상 이긴다 — 그래서 variables: 키워드로
+    # 덮어쓰려던 첫 시도는 무시되고 온프레미스 주소가 그대로 번들에 박혔다(실제로 겪음).
+    # script 안에서 export하면 그 시점엔 이미 주입이 끝난 뒤라 셸 수준에서 확실히 덮어써진다.
+    - export VITE_API_BASE_URL="$VITE_API_BASE_URL_CLOUD"
     - npm run build
   artifacts:
     paths:
