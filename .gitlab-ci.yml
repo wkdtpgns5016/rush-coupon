@@ -148,10 +148,15 @@ backend-deploy-cloud:
     - git clone --branch deploy --single-branch "https://${GITHUB_PAT}@github.com/wkdtpgns5016/rush-coupon.git" deploy-repo
     - cd deploy-repo
     - sed -i "s|^IMAGE=.*|IMAGE=$ECR_REPOSITORY_URL:$CI_COMMIT_SHORT_SHA|" k8s/backend/overlays/cloud/image.env
+    # RDS는 private subnet이라 이 Runner EC2(다른 VPC)가 직접 못 붙는다 — 그래서 psql로
+    # 바로 적용하는 대신, 스키마 소스를 deploy 레포로 복사해 ArgoCD PreSync hook Job이
+    # 클러스터 내부(EKS 노드, RDS와 같은 VPC)에서 적용하게 한다. schema.sql이 유일한
+    # 소스(backend/db/schema.sql)라 여기 복사본은 매 배포마다 항상 최신으로 갱신된다.
+    - cp ../backend/db/schema.sql k8s/backend/overlays/cloud/schema.sql
     - git config user.email "ci@gitlab.local"
     - git config user.name "GitLab CI"
     - >
-      git diff --quiet && echo "이미지 태그 변경 없음, 스킵" ||
+      git diff --quiet && echo "변경 없음, 스킵" ||
       (git commit -am "deploy: cloud backend image tag -> $CI_COMMIT_SHORT_SHA" && git push origin deploy)
 
 frontend-lint:
