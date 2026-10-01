@@ -46,8 +46,12 @@ terraform output -raw mq_password
 
 ## 삭제
 
+**`terraform destroy`를 바로 실행하면 안 된다.** ALB Controller(#56)가 Ingress를 보고 만든 ALB는 Terraform이 전혀 모르는 리소스라서, 먼저 지우지 않으면 VPC/서브넷 삭제가 막히거나 ALB가 고아로 남아 계속 과금될 수 있다. 반드시 아래 순서로:
+
 ```bash
-terraform destroy
+./teardown.sh
 ```
+
+이 스크립트가 (1) Ingress 삭제 → (2) 그 VPC의 ALB가 실제로 사라질 때까지 폴링 → (3) `terraform destroy` 순서로 실행한다. ALB Controller 자체를 아직 안 올렸다면(Ingress가 없다면) 1~2단계는 자동으로 skip되고 바로 destroy로 넘어간다.
 
 RDS는 `skip_final_snapshot = true`로 최종 스냅샷을 안 남기게 해뒀다(스냅샷은 destroy 후에도 과금 대상이라). Amazon MQ/EKS는 삭제에 몇 분 걸릴 수 있다.
