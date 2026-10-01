@@ -20,6 +20,11 @@ import { CouponRetryRouter } from './coupon-retry-router.service';
         username: configService.get<string>('DB_USERNAME', 'postgres'),
         password: configService.get<string>('DB_PASSWORD', 'postgres'),
         database: configService.get<string>('DB_DATABASE', 'rush_coupon'),
+        // app.module.ts와 동일한 이유(RDS rds.force_ssl=1) — 거기 주석 참고.
+        ssl:
+          configService.get<string>('DB_SSL', 'false') === 'true'
+            ? { rejectUnauthorized: false }
+            : false,
         entities: [Coupon, CouponIssue],
         synchronize: false,
         // 배치 flush마다 커넥션 하나만 짧게 쓰는 구조라, backend API 풀보다 훨씬 작게 잡아

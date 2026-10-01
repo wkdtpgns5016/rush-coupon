@@ -78,6 +78,15 @@ resource "aws_ssm_parameter" "db_database" {
   value = var.rds_db_name
 }
 
+# RDS는 rds.force_ssl=1이 기본값이라 평문 연결을 거부한다 — backend/worker(pg 드라이버)용.
+# postgres-exporter는 온프레미스 수동 Secret에 없는 키를 넣으면 $(VAR) 치환이 깨지는
+# 위험이 있어서 SSM이 아니라 overlays/cloud의 kustomize patch로 sslmode=require를 직접 넣는다.
+resource "aws_ssm_parameter" "db_ssl" {
+  name  = "${local.ssm_prefix}/DB_SSL"
+  type  = "SecureString"
+  value = "true"
+}
+
 # --- ESO용 IRSA 역할 ---
 resource "aws_iam_role" "eso" {
   name = "${var.name_prefix}-eso-role"
