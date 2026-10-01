@@ -65,3 +65,9 @@ fi
 echo "== 4. terraform destroy =="
 cd "$TF_DIR"
 terraform destroy
+
+# backend-cdn.tf는 enable_backend_cdn=true일 때 kubernetes_ingress_v1로 backend
+# Ingress를 조회한다 — 이 플래그가 true인 채로 남아있으면, 클러스터 자체가 사라진
+# 다음번 첫 terraform apply가 그 Ingress를 못 찾아서 바로 에러난다. install-all.sh가
+# 다음에 또 처음부터(false) 켤 수 있게 여기서 지운다.
+rm -f "${TF_DIR}/backend-cdn.auto.tfvars"

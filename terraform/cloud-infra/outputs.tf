@@ -86,3 +86,8 @@ output "frontend_cloudfront_distribution_id" {
 output "frontend_url" {
   value = "https://${aws_cloudfront_distribution.frontend.domain_name}"
 }
+
+output "backend_cdn_url" {
+  description = "VITE_API_BASE_URL_CLOUD로 써야 할 값 — enable_backend_cdn=true일 때만 값이 있다"
+  value       = var.enable_backend_cdn ? "https://${aws_cloudfront_distribution.backend[0].domain_name}" : null
+}
