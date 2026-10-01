@@ -16,10 +16,6 @@ output "nat_gateway_id" {
   value       = aws_nat_gateway.this.id
 }
 
-output "ecr_repository_url" {
-  value = aws_ecr_repository.backend.repository_url
-}
-
 output "tailscale_hostname" {
   description = "user_data가 tailscale up --hostname으로 등록하는 이름 — bootstrap-and-verify.sh가 tailscale status에서 이 이름으로 인스턴스를 찾는다"
   value       = var.name_prefix

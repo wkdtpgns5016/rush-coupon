@@ -7,7 +7,7 @@ GitLab CE + Runner를 AWS EC2로 옮겨서, 새 EKS 스택을 기다리지 않�
 - 전용 VPC + 퍼블릭 서브넷(NAT Gateway) + 프라이빗 서브넷(EC2)
 - GitLab+Runner EC2 (Ubuntu 22.04, t3.large) — 프라이빗 서브넷, 퍼블릭 IP 없음
 - 부팅 시 user_data로 Docker 설치 + SSM Parameter Store에서 Tailscale authkey를 가져와 tailnet 조인까지 자동화 (authkey는 ephemeral 변수 + write-only 인자라 state/user_data 어디에도 평문으로 안 남음)
-- ECR 리포지토리 (backend 이미지 push 대상) + EC2에 push 권한을 주는 IAM 역할
+- EC2에 ECR push 권한(`AmazonEC2ContainerRegistryPowerUser`, 계정 전체)을 주는 IAM 역할 — ECR 리포지토리 자체는 `terraform/cloud-infra`(#55)에 있다. 이 스택처럼 자주 스핀업/destroy되는 곳에 리포지토리를 두면 destroy할 때마다 이미지가 같이 사라져서, EKS가 있는 영구적인 스택으로 옮겼다
 - 보안그룹은 아웃바운드만 허용한다. 프라이빗 서브넷이라 인터넷發 인바운드가 라우팅 단계에서부터 불가능하고, SSH도 Tailscale(아웃바운드로 시작되는 세션의 stateful 리턴 트래픽)로만 붙기 때문에 인그레스 규칙 자체가 필요 없다
 - `bootstrap-and-verify.sh` — apply 이후 실행하는 오케스트레이션 스크립트. Tailscale에 인스턴스가 뜰 때까지 기다렸다가, `DOCKER_HOST=ssh://ubuntu@<tailscale-ip>`로 docker 명령만 원격 조준해서 기존 `deploy/gitlab/` 스크립트를 그대로 재사용한다. kubectl/curl/GITHUB_PAT 등은 계속 이 Mac에서 실행되므로 온프레미스 클러스터의 kubeconfig나 GITHUB_PAT/DB비밀번호/SSH키가 EC2로 전혀 넘어가지 않는다
 
@@ -43,4 +43,4 @@ terraform apply && ./bootstrap-and-verify.sh
 terraform destroy
 ```
 
-ECR 리포지토리는 이미지가 남아있으면 삭제가 막히니, 재사용할 계획이 없으면 `force_delete`를 켜거나 이미지를 먼저 비운다.
+ECR 리포지토리는 이 스택에 없으니(`terraform/cloud-infra` 참고) destroy해도 이미지는 그대로 남는다.

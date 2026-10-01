@@ -75,8 +75,3 @@ variable "gitlab_registry_port" {
   default     = 5050
 }
 
-variable "ecr_repository_name" {
-  description = "backend 이미지를 push할 ECR 리포지토리 이름"
-  type        = string
-  default     = "rush-coupon-backend"
-}
