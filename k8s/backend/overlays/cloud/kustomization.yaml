@@ -48,13 +48,20 @@ configMapGenerator:
   # Sync 단계에서야 생성되는데, schema-apply Job은 그보다 앞선 PreSync 단계에서 이미
   # 떠서 "configmap not found"로 마운트가 깨진다(실제로 겪은 에러). 같은 PreSync 단계에
   # 두면 Job과 함께 먼저 생성된다.
+  #
+  # hook-delete-policy는 HookSucceeded가 아니라 BeforeHookCreation이어야 한다 —
+  # ConfigMap은 Job과 달리 "실행 완료" 개념이 없어서 HookSucceeded면 적용되자마자
+  # 바로 "성공"으로 간주돼 즉시 삭제되고, 뒤이어 뜨는 Job의 Pod가 마운트할 때는 이미
+  # 사라진 뒤라 똑같이 "configmap not found"가 난다(실제로 겪은 에러).
+  # BeforeHookCreation은 "다음에 같은 이름의 hook을 또 만들기 직전"에만 이전 걸 지우므로
+  # 이번 실행 중에는 안전하게 남아있는다.
   - name: schema-sql
     files:
       - schema.sql
     options:
       annotations:
         argocd.argoproj.io/hook: PreSync
-        argocd.argoproj.io/hook-delete-policy: HookSucceeded
+        argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 
 replacements:
   - source:
