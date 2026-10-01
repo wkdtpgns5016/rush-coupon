@@ -15,8 +15,7 @@ spec:
       labels:
         app: worker
     spec:
-      imagePullSecrets:
-        - name: gitlab-registry
+      # imagePullSecrets는 여기 없다 — local 오버레이가 패치로 추가한다 (backend/deployment.yaml 참고)
       containers:
         - name: worker
           image: IMAGE_PLACEHOLDER
@@ -49,9 +48,15 @@ spec:
                   name: backend-db-credentials
                   key: DB_PASSWORD
             - name: RABBITMQ_HOST
-              value: rabbitmq
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-network
+                  key: RABBITMQ_HOST
             - name: RABBITMQ_PORT
-              value: "5672"
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-network
+                  key: RABBITMQ_PORT
             - name: RABBITMQ_USERNAME
               valueFrom:
                 secretKeyRef:

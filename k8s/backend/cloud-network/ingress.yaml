@@ -1,0 +1,34 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: backend
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    # EKS 파드는 VPC CNI로 자기 IP를 직접 받으니, ALB가 NodePort를 거치지 않고
+    # 파드 IP로 바로 라우팅하게 한다 (target-type: instance보다 실무 표준 권장 방식).
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+spec:
+  ingressClassName: alb
+  # host를 지정하지 않는다 — ALB는 생성 시점에 AWS가 DNS 이름을 자동 할당해서
+  # local처럼 "IP.nip.io"로 미리 예측할 수 있는 고정값이 없다. 생성 후
+  # `kubectl get ingress backend -n rush-coupon`으로 ADDRESS 컬럼에서 확인한다.
+  rules:
+    - http:
+        # local-network/ingress.yaml과 동일한 경로 목록 — /metrics는 일부러 제외
+        # (ServiceMonitor가 Pod에 직접 접근, 대소문자 우회 문제는 그쪽 주석 참고)
+        paths:
+          - path: /coupons
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 80
+          - path: /
+            pathType: Exact
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 80

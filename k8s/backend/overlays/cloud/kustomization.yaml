@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# overlays/local과 달리 valkey/rabbitmq는 포함하지 않는다 — ElastiCache/Amazon MQ로
+# 완전히 대체 (base에도 애초에 없음, local만 명시적으로 추가하는 구조).
+# imagePullSecrets 패치도 없다 — EKS 노드 IAM 역할로 ECR을 인증 없이 pull하므로 불필요.
+resources:
+  - ../../base
+
+configMapGenerator:
+  - name: backend-image
+    envs:
+      - image.env
+    options:
+      disableNameSuffixHash: true
+
+replacements:
+  - source:
+      kind: ConfigMap
+      name: backend-image
+      fieldPath: data.IMAGE
+    targets:
+      - select:
+          kind: Deployment
+          name: backend
+        fieldPaths:
+          - spec.template.spec.containers.0.image
+      - select:
+          kind: Deployment
+          name: worker
+        fieldPaths:
+          - spec.template.spec.containers.0.image

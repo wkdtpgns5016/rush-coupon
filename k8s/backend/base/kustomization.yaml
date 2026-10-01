@@ -3,12 +3,13 @@ kind: Kustomization
 
 namespace: rush-coupon
 
+# valkey/rabbitmq는 여기 없다 — 온프레미스(overlays/local)는 클러스터 안에 자체 파드로
+# 띄우지만, 클라우드(overlays/cloud)는 ElastiCache/Amazon MQ로 완전히 대체해서 base에
+# 넣으면 cloud에서도 안 쓰는 파드가 떠버린다. local 오버레이가 명시적으로 추가한다.
 resources:
   - deployment.yaml
   - service.yaml
   - hpa.yaml
   - servicemonitor.yaml
   - postgres-exporter
-  - valkey
-  - rabbitmq
   - worker

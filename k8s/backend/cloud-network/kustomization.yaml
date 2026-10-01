@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: rush-coupon
+
+resources:
+  - ingress.yaml
+
+# local-network와 달리 INGRESS_HOST → Ingress host 치환이 없다. ALB는 host 필드
+# 자체를 안 쓰기로 했다(ingress.yaml 주석 참고). CORS_ORIGIN/VALKEY/RABBITMQ만 주입한다.
+configMapGenerator:
+  - name: backend-network
+    envs:
+      - network-connection.env
+    options:
+      disableNameSuffixHash: true
