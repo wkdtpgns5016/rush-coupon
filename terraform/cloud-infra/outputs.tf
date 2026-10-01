@@ -72,3 +72,17 @@ output "alb_controller_role_arn" {
   description = "install-alb-controller.sh가 ServiceAccount annotation으로 쓸 IRSA 역할 ARN"
   value       = aws_iam_role.alb_controller.arn
 }
+
+output "frontend_bucket_name" {
+  description = "#59 frontend-deploy-cloud CI job이 aws s3 sync 대상으로 쓸 버킷 이름"
+  value       = aws_s3_bucket.frontend.bucket
+}
+
+output "frontend_cloudfront_distribution_id" {
+  description = "#59 frontend-deploy-cloud CI job이 캐시 무효화에 쓸 CloudFront 배포 ID"
+  value       = aws_cloudfront_distribution.frontend.id
+}
+
+output "frontend_url" {
+  value = "https://${aws_cloudfront_distribution.frontend.domain_name}"
+}

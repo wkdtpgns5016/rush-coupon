@@ -2,9 +2,9 @@
 # terraform apply 이후 실행한다. 사용법: terraform apply && ./bootstrap-and-verify.sh
 #
 # Tailscale에 새 GitLab+Runner 인스턴스가 나타날 때까지 기다렸다가, 기존
-# deploy/gitlab/{up.sh,script/bootstrap-gitlab.sh,script/register-ci-variables.sh}를
-# 그대로 재사용해 GitLab 배포 → 부트스트랩 → CI 변수 등록 → GitHub Secrets/Variables
-# 갱신까지 끝낸다.
+# deploy/gitlab/{up.sh,script/bootstrap-gitlab.sh,script/sync-cloud-env.sh,
+# script/register-ci-variables.sh}를 그대로 재사용해 GitLab 배포 → 부트스트랩 →
+# cloud-infra 값 반영 → CI 변수 등록 → GitHub Secrets/Variables 갱신까지 끝낸다.
 #
 # 핵심 트릭: DOCKER_HOST=ssh://ubuntu@<tailscale-ip> 로 docker 명령만 원격 조준한다.
 # 스크립트 자체(kubectl, curl, .env 읽기)는 계속 이 Mac에서 실행되므로 kubeconfig,
@@ -64,6 +64,12 @@ echo ""
 echo "== 4. docker compose up + bootstrap (원격 docker 데몬, kubectl/curl은 로컬 실행) =="
 export DOCKER_HOST="ssh://ubuntu@${IP}"
 (cd "$GITLAB_DIR" && ./up.sh --bootstrap)
+
+echo "== 4-1. terraform/cloud-infra output + kubectl → .env 자동 반영 =="
+# #59: ECR_REPOSITORY_URL/FRONTEND_BUCKET/CLOUDFRONT_DISTRIBUTION_ID/VITE_API_BASE_URL_CLOUD를
+# 직접 채우는 대신 여기서 가져온다. cloud-infra가 아직 apply 안 됐거나 backend Ingress가
+# 아직 없으면 이 스텝에서 에러로 멈춘다 — cloud-infra apply를 먼저 끝내고 다시 실행하면 된다.
+(cd "$GITLAB_DIR" && ./script/sync-cloud-env.sh)
 
 echo "== 5. CI/CD Variables 등록 (GitLab 프로젝트) =="
 (cd "$GITLAB_DIR" && ./script/register-ci-variables.sh)

@@ -5,11 +5,14 @@
 # deploy/gitlab/.env.example 참고 — 필수: TOKEN, PROJECT_ID, GITLAB_HOST
 # 선택: GITHUB_PAT, EXTERNAL_DB_HOST, EXTERNAL_DB_PORT, EXTERNAL_DB_NAME,
 #       EXTERNAL_DB_USER, EXTERNAL_DB_PASSWORD, VITE_API_BASE_URL,
-#       FRONTEND_HOST, FRONTEND_SSH_PORT, FRONTEND_SSH_KEY_PATH
+#       FRONTEND_HOST, FRONTEND_SSH_PORT, FRONTEND_SSH_KEY_PATH,
+#       VITE_API_BASE_URL_CLOUD, FRONTEND_BUCKET, CLOUDFRONT_DISTRIBUTION_ID
+#       (이 3개는 직접 채우지 않고 ./sync-cloud-env.sh가 terraform/cloud-infra output +
+#        kubectl로 채운다 — 이 스크립트는 .env만 읽을 뿐 그 값의 출처는 모른다)
 #
 # 사용:
 #   cd deploy/gitlab && cp .env.example .env   # 아직 없다면
-#   .env 채운 뒤:
+#   .env 채운 뒤 (클라우드 값은 ./script/sync-cloud-env.sh로 자동 채우기 가능):
 #   ./script/register-ci-variables.sh
 
 set -euo pipefail
@@ -54,6 +57,9 @@ set_var "EXTERNAL_DB_PASSWORD" "${EXTERNAL_DB_PASSWORD:-}" true
 set_var "VITE_API_BASE_URL" "${VITE_API_BASE_URL:-}"
 set_var "FRONTEND_HOST" "${FRONTEND_HOST:-}"
 set_var "FRONTEND_SSH_PORT" "${FRONTEND_SSH_PORT:-}"
+set_var "VITE_API_BASE_URL_CLOUD" "${VITE_API_BASE_URL_CLOUD:-}"
+set_var "FRONTEND_BUCKET" "${FRONTEND_BUCKET:-}"
+set_var "CLOUDFRONT_DISTRIBUTION_ID" "${CLOUDFRONT_DISTRIBUTION_ID:-}"
 
 if [ -n "${FRONTEND_SSH_KEY_PATH:-}" ]; then
   set_var "FRONTEND_SSH_PRIVATE_KEY" "$(base64 -b 0 -i "$FRONTEND_SSH_KEY_PATH")" true true
