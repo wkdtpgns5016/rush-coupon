@@ -57,6 +57,11 @@ spec:
                 secretKeyRef:
                   name: backend-network
                   key: RABBITMQ_PORT
+            - name: RABBITMQ_PROTOCOL
+              valueFrom:
+                secretKeyRef:
+                  name: backend-network
+                  key: RABBITMQ_PROTOCOL
             - name: RABBITMQ_USERNAME
               valueFrom:
                 secretKeyRef:

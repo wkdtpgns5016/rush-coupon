@@ -79,6 +79,12 @@ spec:
                 secretKeyRef:
                   name: backend-network
                   key: RABBITMQ_PORT
+            # local은 평문(amqp), cloud(Amazon MQ)는 TLS(amqps)만 지원해서 환경별로 다른 값
+            - name: RABBITMQ_PROTOCOL
+              valueFrom:
+                secretKeyRef:
+                  name: backend-network
+                  key: RABBITMQ_PROTOCOL
             - name: RABBITMQ_USERNAME
               valueFrom:
                 secretKeyRef:
