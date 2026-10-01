@@ -43,9 +43,18 @@ configMapGenerator:
   # backend-image와 달리 해시 접미사를 그대로 둔다 — schema.sql 내용이 바뀌면 ConfigMap
   # 이름도 바뀌어서(schema-apply-job.yaml의 volumes.configMap.name 참조는 kustomize가
   # 자동으로 새 이름에 맞게 고쳐준다) 매 sync마다 정확히 그 시점의 스키마가 적용된다.
+  #
+  # annotations로 이 ConfigMap도 PreSync hook으로 지정한다 — 안 하면 일반 리소스라
+  # Sync 단계에서야 생성되는데, schema-apply Job은 그보다 앞선 PreSync 단계에서 이미
+  # 떠서 "configmap not found"로 마운트가 깨진다(실제로 겪은 에러). 같은 PreSync 단계에
+  # 두면 Job과 함께 먼저 생성된다.
   - name: schema-sql
     files:
       - schema.sql
+    options:
+      annotations:
+        argocd.argoproj.io/hook: PreSync
+        argocd.argoproj.io/hook-delete-policy: HookSucceeded
 
 replacements:
   - source:
