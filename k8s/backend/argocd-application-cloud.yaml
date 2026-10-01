@@ -4,6 +4,11 @@ metadata:
   name: backend
   namespace: argocd
 spec:
+  # 적용 전에 install-eso.sh/install-alb-controller.sh/install-monitoring.sh/
+  # install-metrics-server.sh가 전부 끝나 있어야 한다 — 그렇지 않으면 ExternalSecret/
+  # Ingress/ServiceMonitor가 각자의 CRD/컨트롤러 부재로 동기화 실패를 반복한다
+  # (이전엔 SkipDryRunOnMissingResource로 우회했었는데, 설치 순서를 지키면 애초에
+  # 필요 없는 우회라 제거했다).
   project: default
   source:
     repoURL: https://github.com/wkdtpgns5016/rush-coupon.git
@@ -16,8 +21,3 @@ spec:
     automated:
       prune: true
       selfHeal: true
-    # ServiceMonitor CRD(Prometheus Operator)가 아직 이 클러스터에 없다 — 모니터링 스택은
-    # #60에서 설치 예정. 이 옵션 없이는 CRD 하나가 없다는 이유로 전체 동기화가 실패/재시도를
-    # 반복한다(실제로 겪음). #60에서 CRD가 생기면 selfHeal이 자동으로 따라잡는다.
-    syncOptions:
-      - SkipDryRunOnMissingResource=true
