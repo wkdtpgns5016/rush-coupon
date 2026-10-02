@@ -9,9 +9,6 @@ kind: Kustomization
 # 리소스라 base의 namespace: rush-coupon이 안 먹는다 (overlays/local에서 valkey/rabbitmq
 # 때 겪은 것과 같은 함정) — 그래서 여기서 namespace를 명시한다.
 #
-# backend-db-credentials-auth(RDS Secrets Manager ARN 참조)는 여기 없다 — ARN이 실제
-# 리소스 식별자라 git에 못 올려서, terraform/cloud-infra/eso-db-credentials.tf가 직접
-# 생성한다 (external-secrets.yaml 상단 주석 참고).
 namespace: rush-coupon
 
 resources:
@@ -20,6 +17,7 @@ resources:
   - external-secrets.yaml
   - ingress.yaml
   - schema-apply-job.yaml
+  - db-credentials-job.yaml
 
 # postgres-exporter의 DATA_SOURCE_URI는 base에서 sslmode=disable로 고정돼있다(온프레미스
 # 기본값, 건드리면 위험한 이유는 postgres-exporter/deployment.yaml 주석 참고) — RDS는 SSL을

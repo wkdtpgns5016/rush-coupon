@@ -21,3 +21,9 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    # rush-coupon 네임스페이스가 미리 존재한다고 가정하면 안 된다 — 완전히 빈 환경에서
+    # 처음 apply할 때는 이 네임스페이스 자체가 없어서 "namespaces not found"로 sync가
+    # 계속 실패한다(실제로 겪음, 그동안은 예전 환경에 남아있던 네임스페이스를 계속
+    # 재사용해서 몰랐던 문제). ArgoCD가 destination 네임스페이스를 직접 만들게 한다.
+    syncOptions:
+      - CreateNamespace=true

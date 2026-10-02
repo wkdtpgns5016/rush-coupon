@@ -5,6 +5,26 @@
 # HookSucceeded 정책이라 성공하면 자동 정리되어 다음 sync 때 새로 생성된다.
 # schema.sql(ConfigMap generator로 생성)이 CREATE TABLE IF NOT EXISTS / ADD COLUMN
 # IF NOT EXISTS로 멱등하게 작성돼 있어서 매번 재실행해도 안전하다.
+#
+# backend-db-credentials Secret을 secretKeyRef로 참조하지 않는다 — 그 Secret의
+# DB_HOST/PORT/DATABASE/SSL은 ESO의 backend-db-credentials-connection(ExternalSecret)이
+# 채우는데, 이건 hook이 아니라 일반 Sync 단계 리소스라 PreSync인 이 Job보다 항상
+# 늦게 적용된다. 이전 sync에서 이미 채워진 Secret이 남아있을 땐 안 보이던 문제였는데,
+# 완전히 빈 환경에서 처음 sync할 땐 CreateContainerConfigError로 계속 막힌다
+# (실제로 겪음).
+#
+# 대안으로 ArgoCD에 ExternalSecret용 커스텀 health check(Lua)를 등록하고 SyncWave로
+# 순서를 보장하는 방법도 검토했다 — ArgoCD+ESO 조합에서 더 널리 쓰이는 "정석" 패턴이긴
+# 한데, (1) argocd-cm 전역 설정이라 클러스터의 모든 ExternalSecret 판정 방식에 영향을
+# 주고 (2) 검증 없이 포트폴리오에 넣기엔 Lua 스크립트 오류 리스크가 있어서, DB
+# 마이그레이션처럼 "한 번 실패하면 안 되는 치명적 게이트 작업"에 한해서는 레이스
+# 컨디션이 원천적으로 없는 이 방식(AWS 직접 조회)을 택했다. 일반 앱 시크릿
+# (backend-network 등)까지 전부 이 방식으로 바꿀 필요는 없다 — 그쪽은 Health Check
+# 도입이 더 맞는 차기 개선 과제로 남겨둔다.
+#
+# db-credentials-apply(같은 디렉터리)와 같은 IAM 역할(db-credentials-job)을 재사용한다
+# — 새 역할을 또 안 만들어서 권한 표면이 늘지 않는다. RDS를 직접 describe하면
+# host/port/db명까지 한 번에 나와서, Kubernetes Secret 타이밍과 완전히 무관해진다.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -16,45 +36,34 @@ spec:
   backoffLimit: 2
   template:
     spec:
+      serviceAccountName: db-credentials-job
       restartPolicy: Never
       containers:
         - name: schema-apply
-          image: postgres:16-alpine
-          # k8s의 $(VAR) 필드 치환이 아니라 평범한 셸 변수($VAR)로 참조한다 — RDS 비밀번호는
-          # AWS가 자동 생성해서 괄호 등 특수문자가 섞일 수 있는데, $(VAR)로 먼저 치환해버리면
-          # 그 값이 셸 구문으로 다시 해석되면서 깨진다(실제로 "unexpected )" 에러로 겪음).
+          image: amazon/aws-cli:2.17.62
+          env:
+            - name: DB_INSTANCE_ID
+              value: rush-coupon-cloud-postgres
+            - name: AWS_REGION
+              value: ap-northeast-2
           command:
             - sh
             - -c
-            - PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME" -d "$DB_DATABASE" -f /sql/schema.sql
-          env:
-            - name: PGSSLMODE
-              value: "require"
-            - name: DB_HOST
-              valueFrom:
-                secretKeyRef:
-                  name: backend-db-credentials
-                  key: DB_HOST
-            - name: DB_PORT
-              valueFrom:
-                secretKeyRef:
-                  name: backend-db-credentials
-                  key: DB_PORT
-            - name: DB_DATABASE
-              valueFrom:
-                secretKeyRef:
-                  name: backend-db-credentials
-                  key: DB_DATABASE
-            - name: DB_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: backend-db-credentials
-                  key: DB_USERNAME
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: backend-db-credentials
-                  key: DB_PASSWORD
+            - |
+              set -e
+              yum install -y -q jq postgresql15 >/dev/null
+
+              DB_INFO=$(aws rds describe-db-instances --db-instance-identifier "$DB_INSTANCE_ID")
+              DB_HOST=$(echo "$DB_INFO" | jq -r '.DBInstances[0].Endpoint.Address')
+              DB_PORT=$(echo "$DB_INFO" | jq -r '.DBInstances[0].Endpoint.Port')
+              DB_DATABASE=$(echo "$DB_INFO" | jq -r '.DBInstances[0].DBName')
+              SECRET_ARN=$(echo "$DB_INFO" | jq -r '.DBInstances[0].MasterUserSecret.SecretArn')
+              SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "$SECRET_ARN" --query SecretString --output text)
+              DB_USERNAME=$(echo "$SECRET_JSON" | jq -r .username)
+              DB_PASSWORD=$(echo "$SECRET_JSON" | jq -r .password)
+
+              PGPASSWORD="$DB_PASSWORD" PGSSLMODE=require \
+                psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME" -d "$DB_DATABASE" -f /sql/schema.sql
           volumeMounts:
             - name: sql
               mountPath: /sql
