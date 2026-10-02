@@ -89,6 +89,10 @@
 | [k8s 파드에서 Tailscale 너머 외부 Postgres 접속 실패](docs/troubleshooting/postgres-k8s-tailscale-routing.md) | Mac(Tailscale)-VM(k8s worker) 구성에서, Tailscale의 전용 라우팅 테이블이 **포워딩되는 트래픽에는 적용되지 않음** — subnet router(k8s-master)를 거쳐 나가는 파드 트래픽이 여기 해당 | k8s-worker 노드의 메인 라우팅 테이블에 `100.64.0.0/10 dev tailscale0` 라우트를 명시적으로 추가(systemd로 영구화). 원인 파악에만 약 2시간 소요 |
 | [M3 spike 테스트에서 Grafana P95/P99가 실측값(59.8s)과 다르게 10s로 표시됨](docs/troubleshooting/grafana-histogram-bucket-precision.md) | `/metrics` 히스토그램 버킷이 100~500ms 구간 해상도라 그보다 큰 값을 담을 버킷이 없어 `histogram_quantile`이 최대 버킷으로 뭉개 추정 | 15/30/60/120s 버킷 추가 (#36), scaleout 재검증으로 확인 |
 | [Worker 강제 종료 후 정리(cleanup) 스크립트가 DLQ에 좀비 메시지를 만듦](docs/troubleshooting/worker-kill-dlq-cleanup-race.md) | RabbitMQ가 죽은 컨슈머를 감지하는 데 하트비트 타임아웃(실측 **108초**)만큼 걸리는데, 그 사이 테스트 정리 스크립트가 부모 쿠폰을 먼저 삭제해버려 뒤늦게 재배달된 메시지가 FK 위반으로 영구 실패 | 정리 전 RabbitMQ 메인+재시도 큐가 완전히 빌 때까지 기다리는 체크 추가 (`CHECK_RABBITMQ_DRAIN`) |
+| [완전히 빈 클라우드 환경에서 ArgoCD PreSync Hook이 연쇄적으로 깨짐 (M6)](docs/troubleshooting/db-credentials-presync-hook-and-pod-identity.md) | ArgoCD의 PreSync→Sync는 완전히 분리된 두 단계라, PreSync Job은 자신이 참조하는 리소스가 PreSync가 아니면(ServiceAccount/ConfigMap 누락) 물론, 아예 다른 단계(ExternalSecret 같은 일반 Sync 리소스)의 결과도 원천적으로 볼 수 없음 — 기존 클러스터를 재사용한 테스트에서는 전혀 드러나지 않던 문제 | ServiceAccount/ConfigMap에도 PreSync 애노테이션 추가 + `schema-apply`가 ExternalSecret 대신 같은 Pod Identity로 RDS를 직접 조회하도록 바꿔 의존 자체를 제거 |
+| [IRSA가 ServiceAccount 매니페스트에 AWS 계정 ID를 평문으로 남김 (M6)](docs/troubleshooting/db-credentials-presync-hook-and-pod-identity.md) | IRSA는 OIDC federation 방식이라 `role-arn` 애노테이션에 계정 ID가 포함된 ARN을 git에 커밋되는 매니페스트에 직접 적어야 함 | **EKS Pod Identity**로 전환 — "어떤 ServiceAccount가 역할을 쓸 수 있는지"를 매니페스트가 아니라 AWS 쪽 association 리소스가 결정하게 해 계정 ID가 git에서 사라짐 |
+| [GitLab+Runner를 EC2로 옮기자 온프레미스 클러스터의 이미지 pull이 깨짐 (M6)](docs/troubleshooting/gitlab-runner-aws-migration-registry-issues.md) | GitLab 레지스트리가 평문 HTTP라 insecure-registry 예외가 필요한데, 이 설정이 레지스트리가 아니라 **그걸 쓰는 daemon마다** 필요하다는 걸 간과 — EC2의 dockerd는 갱신했지만 k8s-worker의 containerd 쪽을 빠뜨림 | containerd `hosts.toml`을 새 IP로 갱신, 실패 중인 파드를 지워 강제 재시도 |
+| [Alpine 컨테이너 안에서 ECR 인증이 간헐적으로 실패 (M6)](docs/troubleshooting/gitlab-runner-aws-migration-registry-issues.md) | ① Alpine의 Python 기반 aws-cli가 musl libc와 `pyexpat` 심볼 비호환으로 깨짐 ② 컨테이너 안에서의 EC2 메타데이터 요청은 호스트를 거쳐 1홉이 추가되는데 IMDS hop-limit 기본값(1)이 이를 막음 | musl 비의존 Go 바이너리(`docker-credential-ecr-login`)로 교체 + 인스턴스 hop-limit을 2로 상향 |
 
 **DLQ 운영**: 재시도(2s→8s→32s)를 다 소진한 메시지는 `coupon.issued.dlq`로 격리된다. 사람이 원인을 판단하고, 카나리아(`--limit`)로 소수만 먼저 되돌려 확인한 뒤 전체를 재발행하는 절차를 문서화했다 — [DLQ 복구 절차](docs/operations/dlq-recovery.md).
 
@@ -112,6 +116,7 @@ docs/       도메인 ERD, 설정 가이드, 부하 테스트 리포트, 트러�
 - **클러스터 프로비저닝**: kubeadm 기반 k8s 클러스터(VM 2대) 생성과 모니터링 애드온(kube-prometheus-stack, metrics-server) 설치는 별도 레포 [setup-k8s-vm](https://github.com/wkdtpgns5016/setup-k8s-vm)의 스크립트를 사용했다.
 - **신규 환경 세팅**: [docs/setup/fresh-environment-setup.md](docs/setup/fresh-environment-setup.md)
 - **부하 테스트 (온프레미스)**: [docs/load-test/m5-k6-load-test.md](docs/load-test/m5-k6-load-test.md) (`k6/scripts/run.sh <baseline|spike|scaleout>`)
+- **클라우드 환경 세팅 (M6)**: [docs/setup/cloud-environment-setup.md](docs/setup/cloud-environment-setup.md)
 - **부하 테스트 (클라우드)**: `k6/scripts/run-cloud.sh <baseline|spike|scaleout>` — k6는 로컬에서 CloudFront 엔드포인트로 직접 실행하고, RDS 의존 후처리(배출 대기·정합성 검증·정리)는 자동으로 EKS 안의 일회성 Pod에서 수행한다(RDS가 private subnet이라 로컬에서 직접 접속 불가)
 - **로컬 개발**: `cd backend && docker compose up -d`
 
