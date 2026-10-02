@@ -74,7 +74,7 @@ output "alb_controller_role_arn" {
 }
 
 output "db_credentials_job_role_arn" {
-  description = "deploy 레포 db-credentials-job.yaml의 ServiceAccount annotation으로 쓸 IRSA 역할 ARN — 계정 ID만 바뀔 수 있는 결정적 값이라 git에 그대로 적어도 된다(ECR_REPOSITORY_URL과 같은 성격)"
+  description = "db-credentials-job Job이 쓰는 IAM 역할 ARN — EKS Pod Identity(aws_eks_pod_identity_association)로 연결돼 있어 매니페스트 어디에도 안 적는다. 디버깅/조회용 참고 출력"
   value       = aws_iam_role.db_credentials_job.arn
 }
 
