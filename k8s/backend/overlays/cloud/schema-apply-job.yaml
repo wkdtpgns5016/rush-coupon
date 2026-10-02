@@ -40,7 +40,15 @@ spec:
       restartPolicy: Never
       containers:
         - name: schema-apply
-          image: amazon/aws-cli:2.17.62
+          # amazon/aws-cli(AL2 베이스)는 기본 psql이 9.2라 RDS의 SCRAM 인증을 지원 못
+          # 하고("SCRAM authentication requires libpq version 10 or above", 실제로
+          # 겪음), pgdg 저장소로 최신 psql을 받으려 해도 AL2의 $releasever 인식 문제로
+          # 저장소 URL이 깨진다. 반대로 postgres:16-alpine(최신 psql 있음)은 musl이라
+          # AWS CLI v2 공식 설치본이 아예 실행이 안 된다(glibc 동적 링커 없음 — v1은
+          # 순수 Python이라 되지만 v2와 버전을 맞추고 싶어서 보류). 그래서 둘 다 되는
+          # glibc 기반(Debian)에 apt로 최신 psql + 공식 v2 설치본을 둘 다 깐다 — 직접
+          # 테스트해서 IRSA 인증·RDS 조회·SCRAM 접속까지 전부 확인함.
+          image: debian:12-slim
           env:
             - name: DB_INSTANCE_ID
               value: rush-coupon-cloud-postgres
@@ -51,18 +59,19 @@ spec:
             - -c
             - |
               set -e
-              # amazon/aws-cli 이미지는 Amazon Linux 2 베이스라 psql 패키지 이름이
-              # postgresql15가 아니라 그냥 postgresql이다(실제로 "command not found"로
-              # 겪고 확인함 — yum search postgresql 결과 "postgresql.x86_64: PostgreSQL
-              # client programs").
-              yum install -y -q jq postgresql >/dev/null
+              apt-get update -qq
+              apt-get install -y -qq curl unzip postgresql-client jq >/dev/null
 
-              DB_INFO=$(aws rds describe-db-instances --db-instance-identifier "$DB_INSTANCE_ID")
+              curl -sL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
+              unzip -q awscliv2.zip
+              ./aws/install >/dev/null
+
+              DB_INFO=$(/usr/local/bin/aws rds describe-db-instances --db-instance-identifier "$DB_INSTANCE_ID")
               DB_HOST=$(echo "$DB_INFO" | jq -r '.DBInstances[0].Endpoint.Address')
               DB_PORT=$(echo "$DB_INFO" | jq -r '.DBInstances[0].Endpoint.Port')
               DB_DATABASE=$(echo "$DB_INFO" | jq -r '.DBInstances[0].DBName')
               SECRET_ARN=$(echo "$DB_INFO" | jq -r '.DBInstances[0].MasterUserSecret.SecretArn')
-              SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "$SECRET_ARN" --query SecretString --output text)
+              SECRET_JSON=$(/usr/local/bin/aws secretsmanager get-secret-value --secret-id "$SECRET_ARN" --query SecretString --output text)
               DB_USERNAME=$(echo "$SECRET_JSON" | jq -r .username)
               DB_PASSWORD=$(echo "$SECRET_JSON" | jq -r .password)
 
