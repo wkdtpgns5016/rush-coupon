@@ -93,11 +93,36 @@ echo "GITLAB_HOST(변수)=${IP}, GITLAB_DEPLOY_USER/GITLAB_DEPLOY_TOKEN(시크�
 echo "== 7. 스모크 테스트: userland-proxy 활성화 확인 (헤어핀 이슈 우회 확인) =="
 ssh "ubuntu@${IP}" "docker info | grep -i userland"
 
+echo "== 8. GitHub -> GitLab 미러링 수동 트리거 =="
+# mirror-to-gitlab.yml은 push 트리거라, 새 GitLab 인스턴스는 다음 git push가 있을
+# 때까지 비어있는 채로 남는다(실제로 겪음 — GitLab API가 empty_repo: true를 반환).
+# workflow_dispatch로 새 커밋 없이 바로 밀고, GitLab 프로젝트 자체가 더 이상
+# empty_repo가 아닐 때까지 직접 조회해서 확인한다 — GitHub Actions의 "완료" 상태만
+# 믿으면 미러링 자체는 실패했는데 워크플로만 성공한 경우를 놓칠 수 있다.
+gh workflow run mirror-to-gitlab.yml --ref main
+
+echo ">>> GitLab에 실제로 반영될 때까지 대기 중..."
+EMPTY="true"
+for i in $(seq 1 30); do
+  EMPTY="$(curl -s --header "PRIVATE-TOKEN: ${TOKEN}" "http://${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}" \
+    | jq -r '.empty_repo // true')"
+  [ "$EMPTY" = "false" ] && break
+  printf '.'
+  sleep 10
+done
+echo ""
+if [ "$EMPTY" != "false" ]; then
+  echo "타임아웃: GitLab에 미러링이 반영되지 않았습니다. GitHub Actions 로그 확인:" >&2
+  echo "  gh run list --workflow=mirror-to-gitlab.yml" >&2
+  exit 1
+fi
+echo "미러링 확인됨 (GitLab 프로젝트에 커밋 반영됨)"
+
 cat <<EOF
 
 ======================================================
 완료. 남은 수동 작업은 하나뿐입니다:
-  커밋을 하나 push해서 backend-build → backend-deploy 파이프라인이
-  실제로 도는지 확인하세요.
+  GitLab에서 backend-build → backend-deploy-cloud 파이프라인을 실행해
+  새 이미지를 ECR에 올리세요 (destroy로 ECR이 비어있는 상태라면 필수).
 ======================================================
 EOF

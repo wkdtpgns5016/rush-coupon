@@ -73,6 +73,11 @@ output "alb_controller_role_arn" {
   value       = aws_iam_role.alb_controller.arn
 }
 
+output "db_credentials_job_role_arn" {
+  description = "deploy 레포 db-credentials-job.yaml의 ServiceAccount annotation으로 쓸 IRSA 역할 ARN — 계정 ID만 바뀔 수 있는 결정적 값이라 git에 그대로 적어도 된다(ECR_REPOSITORY_URL과 같은 성격)"
+  value       = aws_iam_role.db_credentials_job.arn
+}
+
 output "frontend_bucket_name" {
   description = "#59 frontend-deploy-cloud CI job이 aws s3 sync 대상으로 쓸 버킷 이름"
   value       = aws_s3_bucket.frontend.bucket

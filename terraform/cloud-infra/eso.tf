@@ -110,8 +110,9 @@ resource "aws_iam_role" "eso" {
   })
 }
 
-# 이 경로(/${name_prefix}/*) 아래 파라미터와, RDS가 만든 그 Secrets Manager 비밀 하나만
-# 읽을 수 있게 좁힌다 — #54 tailscale authkey 때와 같은 최소 권한 원칙.
+# 이 경로(/${name_prefix}/*) 아래 파라미터만 읽을 수 있게 좁힌다 — #54 tailscale
+# authkey 때와 같은 최소 권한 원칙. RDS Secrets Manager 접근 권한은 더 이상 여기 없다
+# — db-credentials-job-iam.tf의 별도 역할(ArgoCD PreSync Hook Job 전용)로 옮겼다.
 resource "aws_iam_role_policy" "eso" {
   name = "${var.name_prefix}-eso-policy"
   role = aws_iam_role.eso.id
@@ -126,16 +127,11 @@ resource "aws_iam_role_policy" "eso" {
       },
       {
         Effect   = "Allow"
-        Action   = "secretsmanager:GetSecretValue"
-        Resource = aws_db_instance.this.master_user_secret[0].secret_arn
-      },
-      {
-        Effect   = "Allow"
         Action   = "kms:Decrypt"
         Resource = "*"
         Condition = {
           StringEquals = {
-            "kms:ViaService" = ["ssm.${var.region}.amazonaws.com", "secretsmanager.${var.region}.amazonaws.com"]
+            "kms:ViaService" = "ssm.${var.region}.amazonaws.com"
           }
         }
       }

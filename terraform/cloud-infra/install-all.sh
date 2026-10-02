@@ -19,6 +19,21 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "######################################################################"
+echo "# 0/7 kubeconfig 갱신"
+echo "######################################################################"
+# terraform apply는 AWS에 클러스터만 만들 뿐 로컬 kubeconfig는 안 건드린다 — EKS는
+# 새로 만들 때마다 API 서버 주소가 바뀌어서, 이 스텝 없이는 아래 모든 install-*.sh의
+# `kubectl --context rush-coupon-cloud`가 지난번(또는 아예 없는) 클러스터를 보게 된다
+# (실제로 겪음). --alias 없이 하면 컨텍스트 이름이 ARN 전체로 생겨서 프로젝트 전체가
+# 기대하는 짧은 이름과 안 맞으니 반드시 --alias로 고정한다.
+aws eks update-kubeconfig \
+  --name "$(terraform -chdir="$SCRIPT_DIR" output -raw eks_cluster_name)" \
+  --region ap-northeast-2 \
+  --profile rush-coupon-admin \
+  --alias rush-coupon-cloud
+
+echo ""
+echo "######################################################################"
 echo "# 1/7 External Secrets Operator"
 echo "######################################################################"
 "${SCRIPT_DIR}/install-eso.sh"
@@ -49,7 +64,7 @@ echo "######################################################################"
 
 echo ""
 echo "######################################################################"
-echo "# 6/7 backend 앱 배포 (대시보드 + ArgoCD Application)"
+echo "# 6/7 backend 앱 배포 (대시보드 + ArgoCD Application, DB 자격증명 Job 포함)"
 echo "######################################################################"
 "${SCRIPT_DIR}/bootstrap-backend-app.sh"
 
