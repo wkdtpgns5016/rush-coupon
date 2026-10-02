@@ -51,7 +51,11 @@ spec:
             - -c
             - |
               set -e
-              yum install -y -q jq postgresql15 >/dev/null
+              # amazon/aws-cli 이미지는 Amazon Linux 2 베이스라 psql 패키지 이름이
+              # postgresql15가 아니라 그냥 postgresql이다(실제로 "command not found"로
+              # 겪고 확인함 — yum search postgresql 결과 "postgresql.x86_64: PostgreSQL
+              # client programs").
+              yum install -y -q jq postgresql >/dev/null
 
               DB_INFO=$(aws rds describe-db-instances --db-instance-identifier "$DB_INSTANCE_ID")
               DB_HOST=$(echo "$DB_INFO" | jq -r '.DBInstances[0].Endpoint.Address')
